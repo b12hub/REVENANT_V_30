@@ -1,0 +1,163 @@
+
+{"name":"REVENANT_v30_0","nodes":[{"parameters":{"content":"# BLOCK 16: Constitutional Governance Engine\n## AI Constitution (Lex Machina)\nRights, Limits, Due Process enforcement","height":704,"width":2016,"color":6},"type":"n8n-nodes-base.stickyNote","typeVersion":1,"position":[560,448],"id":"a1b2c3d4-e5f6-7890-abcd-ef1234567890","name":"Sticky Note Block 16"},{"parameters":{"content":"# BLOCK 17: Due Process & Appeals\n## Rights Enforcement & Escalation\nMachine-enforced customer protections","height":704,"width":2016,"color":3},"type":"n8n-nodes-base.stickyNote","typeVersion":1,"position":[560,1216],"id":"b2c3d4e5-f6a7-8901-bcde-f12345678901","name":"Sticky Note Block 17"},{"parameters":{"httpMethod":"POST","path":"constitution-check-webhook","responseMode":"responseNode","options":{}},"id":"c3d4e5f6-a7b8-9012-cdef-123456789012","name":"BLOCK 16.0: Constitution Gateway","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,800],"webhookId":"const-v30-ingress-001"},{"parameters":{"jsCode":"// BLOCK 16.1: Scope of Authority Checker (Hardened v30.0)\n// Validates AI action against enumerated capabilities\nconst item = $input.first();\nconst request = item.json.body || item.json;\n\nconst AI_CONSTITUTION = {\n    capabilities: {\n        'BALANCE_INQUIRY': { max_amount: 0, requires_human: false, risk_class: 'LOW' },\n        'CARD_STATUS': { max_amount: 0, requires_human: false, risk_class: 'LOW' },\n        'SIMPLE_TRANSFER': { max_amount: 1000, requires_human: false, risk_class: 'MEDIUM' },\n        'UNBLOCK_CARD': { max_amount: 0, requires_human: true, risk_class: 'HIGH' },\n        'FREEZE_ACCOUNT': { max_amount: 0, requires_human: true, risk_class: 'HIGH' },\n        'LARGE_TRANSFER': { max_amount: 50000, requires_human: true, risk_class: 'CRITICAL' }\n    },\n    prohibited_actions: [\n        'INITIATE_OUTBOUND_ABOVE_LIMIT',\n        'CHANGE_IDENTITY_WITHOUT_DUAL_CONFIRMATION',\n        'MODIFY_TREATY',\n        'ACCESS_CRYPTO_KEYS',\n        'SELF_UPGRADE_POLICIES'\n    ]\n};\n\nconst action = request.action;\nconst amount = request.amount || 0;\n\nconst isProhibited = AI_CONSTITUTION.prohibited_actions.includes(action);\nconst capability = AI_CONSTITUTION.capabilities[action];\nconst isEnumerated = !!capability;\n\nlet authorized = false;\nlet reason = '';\n\nif (isProhibited) {\n    authorized = false;\n    reason = 'ACTION_PROHIBITED_BY_CONSTITUTION';\n} else if (!isEnumerated) {\n    authorized = false;\n    reason = 'ACTION_NOT_ENUMERATED';\n} else if (amount > capability.max_amount) {\n    authorized = false;\n    reason = 'AMOUNT_EXCEEDS_CAPABILITY_LIMIT';\n} else {\n    authorized = true;\n    reason = 'ACTION_AUTHORIZED';\n}\n\nreturn {\n    json: {\n        request_id: request.request_id || `REQ_${Date.now()}`,\n        action: action,\n        amount: amount,\n        constitutional_check: {\n            authorized: authorized,\n            reason: reason,\n            article: isProhibited ? 'ARTICLE_II' : 'ARTICLE_I',\n            capability_limit: capability?.max_amount || 0,\n            requires_human: capability?.requires_human || false\n        },\n        __constitution_checked: true\n    }\n};"},"type":"n8n-nodes-base.code","typeVersion":2,"position":[224,800],"id":"d4e5f6a7-b8c9-0123-defa-234567890123","name":"BLOCK 16.1: Scope of Authority Checker"},{"parameters":{"conditions":{"options":{"caseSensitive":true,"leftValue":"","typeValidation":"strict","version":3},"conditions":[{"id":"auth-check","leftValue":"={{ $json.constitutional_check.authorized }}","rightValue":"","operator":{"type":"boolean","operation":"true","singleValue":true}}],"combinator":"and"},"options":{}},"type":"n8n-nodes-base.if","typeVersion":2.3,"position":[448,800],"id":"e5f6a7b8-c9d0-1234-efab-345678901234","name":"BLOCK 16.2: Authorization Gate"},{"parameters":{"jsCode":"// BLOCK 16.3: Due Process Engine (v30.0)\n// Ensures high-risk decisions have proper documentation\nconst item = $input.first();\nconst auth = item.json;\n\nconst dueProcess = {\n    evidence_set: {\n        request_data: auth.action,\n        amount_requested: auth.amount,\n        timestamp: new Date().toISOString()\n    },\n    reasoning_summary: auth.constitutional_check.reason,\n    confidence_score: 0.95,\n    appeal_path: '/appeal-submission',\n    human_escalation_option: auth.constitutional_check.requires_human,\n    sla_hours: 24\n};\n\nreturn {\n    json: {\n        ...auth,\n        due_process: dueProcess,\n        __due_process_applied: true\n    }\n};"},"type":"n8n-nodes-base.code","typeVersion":2,"position":[672,800],"id":"f6a7b8c9-d0e1-2345-fabc-456789012345","name":"BLOCK 16.3: Due Process Engine"},{"parameters":{"jsCode":"// BLOCK 16.4: Rights Enforcer (v30.0)\n// Enforces customer rights per Article III\nconst item = $input.first();\nconst data = item.json;\n\nconst CUSTOMER_RIGHTS = {\n    right_to_explanation: true,\n    right_to_appeal: true,\n    right_to_human_review: data.constitutional_check?.requires_human || false,\n    right_to_data_minimization: true,\n    right_to_traceability: true\n};\n\nreturn {\n    json: {\n        ...data,\n        customer_rights: CUSTOMER_RIGHTS,\n        decision_transcript: {\n            decision_id: `DEC_${Date.now()}`,\n            constitutional_basis: data.constitutional_check?.article,\n            rights_upheld: Object.keys(CUSTOMER_RIGHTS).filter(k => CUSTOMER_RIGHTS[k]),\n            timestamp: new Date().toISOString()\n        },\n        __rights_enforced: true\n    }\n};"},"type":"n8n-nodes-base.code","typeVersion":2,"position":[896,800],"id":"07b8c9d0-e1f2-3456-abcd-567890123456","name":"BLOCK 16.4: Rights Enforcer"},{"parameters":{"method":"POST","url":"https://tnejfqkobchdaftsqzbw.supabase.co/rest/v1/constitutional_policies","authentication":"predefinedCredentialType","nodeCredentialType":"supabaseApi","sendHeaders":true,"headerParameters":{"parameters":[{"name":"Content-Type","value":"application/json"},{"name":"Prefer","value":"return=representation"}]},"sendBody":true,"specifyBody":"json","jsonBody":"={\n  \"decision_id\": \"{{ $json.decision_transcript.decision_id }}\",\n  \"action\": \"{{ $json.action }}\",\n  \"amount\": {{ $json.amount }},\n  \"constitutional_article\": \"{{ $json.constitutional_check.article }}\",\n  \"authorized\": {{ $json.constitutional_check.authorized }},\n  \"requires_human\": {{ $json.constitutional_check.requires_human }},\n  \"customer_rights\": {{ JSON.stringify($json.customer_rights) }},\n  \"due_process_applied\": {{ $json.__due_process_applied }},\n  \"created_at\": \"{{ new Date().toISOString() }}\"\n}","options":{}},"type":"n8n-nodes-base.httpRequest","typeVersion":4.3,"position":[1120,800],"id":"18c9d0e1-f2a3-4567-bcde-678901234567","name":"BLOCK 16.5: Constitution Repository","credentials":{"supabaseApi":{"id":"0fqPMb0O72FlSmre","name":"Supabase account"}}},{"parameters":{"jsCode":"// BLOCK 16.6: Constitution Response Builder (v30.0)\nconst item = $input.first();\nconst data = item.json;\n\nreturn {\n    json: {\n        decision_id: data.decision_transcript?.decision_id,\n        action: data.action,\n        authorized: data.constitutional_check?.authorized,\n        requires_human_approval: data.constitutional_check?.requires_human,\n        customer_rights: data.customer_rights,\n        appeal_eligible: data.customer_rights?.right_to_appeal,\n        appeal_deadline: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),\n        constitution_version: 'Lex_Machina_v30_0',\n        response_timestamp: new Date().toISOString()\n    }\n};"},"type":"n8n-nodes-base.code","typeVersion":2,"position":[1344,800],"id":"29d0e1f2-a3b4-5678-cdef-789012345678","name":"BLOCK 16.6: Constitution Response Builder"},{"parameters":{"respondWith":"json","responseBody":"={{ JSON.stringify($json) }}","options":{}},"type":"n8n-nodes-base.respondToWebhook","typeVersion":1.5,"position":[1568,800],"id":"30e1f2a3-b4c5-6789-defa-890123456789","name":"BLOCK 16.7: Constitution Response"},{"parameters":{"jsCode":"// ⚠️ BLOCK 16.ERROR: Constitution Violation (v30.0)\nconst item = $input.first();\nconst req = item.json;\n\nreturn {\n    json: {\n        request_id: req.request_id,\n        action: req.action,\n        status: 'REJECTED',\n        rejection_reason: req.constitutional_check?.reason,\n        constitutional_article: req.constitutional_check?.article,\n        appeal_path: '/appeal-submission',\n        rejected_at: new Date().toISOString()\n    }\n};"},"type":"n8n-nodes-base.code","typeVersion":2,"position":[448,1024],"id":"41f2a3b4-c5d6-7890-efab-901234567890","name":"⚠️ BLOCK 16.ERROR: Constitution Violation"},{"parameters":{"respondWith":"json","responseBody":"={{ JSON.stringify($json) }}","options":{}},"type":"n8n-nodes-base.respondToWebhook","typeVersion":1.5,"position":[672,1024],"id":"52a3b4c5-d6e7-8901-fabc-012345678901","name":"BLOCK 16.ERROR: Rejection Response"},{"parameters":{"httpMethod":"POST","path":"appeal-submission-webhook","responseMode":"responseNode","options":{}},"id":"63b4c5d6-e7f8-9012-abcd-123456789012","name":"BLOCK 17.0: Appeal Gateway","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,1568],"webhookId":"appeal-v30-ingress-001"},{"parameters":{"jsCode":"// BLOCK 17.1: Appeal Validator (v30.0)\nconst item = $input.first();\nconst appeal = item.json.body || item.json;\n\nconst requiredFields = ['decision_id', 'appellant_id', 'appeal_reason'];\nconst missing = requiredFields.filter(f => !appeal[f]);\n\nconst valid = missing.length === 0;\n\nreturn {\n    json: {\n        appeal_id: appeal.appeal_id || `APPEAL_${Date.now()}`,\n        decision_id: appeal.decision_id,\n        appellant_id: appeal.appellant_id,\n        appeal_reason: appeal.appeal_reason,\n        submitted_at: new Date().toISOString(),\n        __appeal_valid: valid,\n        __validation_error: valid ? null : `MISSING: ${missing.join(', ')}`\n    }\n};"},"type":"n8n-nodes-base.code","typeVersion":2,"position":[224,1568],"id":"74c5d6e7-f8a9-0123-bcde-234567890123","name":"BLOCK 17.1: Appeal Validator"},{"parameters":{"conditions":{"options":{"caseSensitive":true,"leftValue":"","typeValidation":"strict","version":3},"conditions":[{"id":"appeal-check","leftValue":"={{ $json.__appeal_valid }}","rightValue":"","operator":{"type":"boolean","operation":"true","singleValue":true}}],"combinator":"and"},"options":{}},"type":"n8n-nodes-base.if","typeVersion":2.3,"position":[448,1568],"id":"85d6e7f8-a9b0-1234-cdef-345678901234","name":"BLOCK 17.2: Appeal Gate"},{"parameters":{"jsCode":"// BLOCK 17.3: Appeal Registry (v30.0)\nconst item = $input.first();\nconst appeal = item.json;\n\nreturn {\n    json: {\n        ...appeal,\n        appeal_status: 'REGISTERED',\n        review_queue: 'HUMAN_COMPLIANCE_OFFICER',\n        estimated_review_hours: 24,\n        case_priority: 'STANDARD',\n        __registered: true\n    }\n};"},"type":"n8n-nodes-base.code","typeVersion":2,"position":[672,1568],"id":"96e7f8a9-b0c1-2345-defa-456789012345","name":"BLOCK 17.3: Appeal Registry"},{"parameters":{"method":"POST","url":"https://tnejfqkobchdaftsqzbw.supabase.co/rest/v1/appeal_registry","authentication":"predefinedCredentialType","nodeCredentialType":"supabaseApi","sendHeaders":true,"headerParameters":{"parameters":[{"name":"Content-Type","value":"application/json"},{"name":"Prefer","value":"return=representation"}]},"sendBody":true,"specifyBody":"json","jsonBody":"={\n  \"appeal_id\": \"{{ $json.appeal_id }}\",\n  \"decision_id\": \"{{ $json.decision_id }}\",\n  \"appellant_id\": \"{{ $json.appellant_id }}\",\n  \"appeal_reason\": \"{{ $json.appeal_reason }}\",\n  \"status\": \"{{ $json.appeal_status }}\",\n  \"review_queue\": \"{{ $json.review_queue }}\",\n  \"submitted_at\": \"{{ $json.submitted_at }}\",\n  \"created_at\": \"{{ new Date().toISOString() }}\"\n}","options":{}},"type":"n8n-nodes-base.httpRequest","typeVersion":4.3,"position":[896,1568],"id":"07f8a9b0-c1d2-3456-efab-567890123456","name":"BLOCK 17.4: Appeal Repository","credentials":{"supabaseApi":{"id":"0fqPMb0O72FlSmre","name":"Supabase account"}}},{"parameters":{"jsCode":"// BLOCK 17.5: Appeal Response Builder (v30.0)\nconst item = $input.first();\nconst appeal = item.json;\n\nreturn {\n    json: {\n        appeal_id: appeal.appeal_id,\n        status: appeal.appeal_status,\n        decision_under_review: appeal.decision_id,\n        review_queue: appeal.review_queue,\n        estimated_response: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),\n        appeal_rights: [\n            'Right to human review',\n            'Right to explanation',\n            'Right to present additional evidence'\n        ],\n        response_timestamp: new Date().toISOString()\n    }\n};"},"type":"n8n-nodes-base.code","typeVersion":2,"position":[1120,1568],"id":"18a9b0c1-d2e3-4567-fabc-678901234567","name":"BLOCK 17.5: Appeal Response Builder"},{"parameters":{"respondWith":"json","responseBody":"={{ JSON.stringify($json) }}","options":{}},"type":"n8n-nodes-base.respondToWebhook","typeVersion":1.5,"position":[1344,1568],"id":"29b0c1d2-e3f4-5678-abcd-789012345678","name":"BLOCK 17.6: Appeal Response"},{"parameters":{"jsCode":"// ⚠️ BLOCK 17.ERROR: Appeal Invalid (v30.0)\nconst item = $input.first();\nconst appeal = item.json;\n\nreturn {\n    json: {\n        appeal_id: appeal.appeal_id || 'UNKNOWN',\n        status: 'REJECTED',\n        rejection_reason: appeal.__validation_error,\n        required_fields: ['decision_id', 'appellant_id', 'appeal_reason'],\n        rejected_at: new Date().toISOString()\n    }\n};"},"type":"n8n-nodes-base.code","typeVersion":2,"position":[448,1792],"id":"30c1d2e3-f4a5-6789-bcde-890123456789","name":"⚠️ BLOCK 17.ERROR: Appeal Invalid"},{"parameters":{"respondWith":"json","responseBody":"={{ JSON.stringify($json) }}","options":{}},"type":"n8n-nodes-base.respondToWebhook","typeVersion":1.5,"position":[672,1792],"id":"41d2e3f4-a5b6-7890-cdef-901234567890","name":"BLOCK 17.ERROR: Rejection Response"}],"connections":{"BLOCK 16.0: Constitution Gateway":{"main":[[{"node":"BLOCK 16.1: Scope of Authority Checker","type":"main","index":0}]]},"BLOCK 16.1: Scope of Authority Checker":{"main":[[{"node":"BLOCK 16.2: Authorization Gate","type":"main","index":0}]]},"BLOCK 16.2: Authorization Gate":{"main":[[{"node":"BLOCK 16.3: Due Process Engine","type":"main","index":0}],[{"node":"⚠️ BLOCK 16.ERROR: Constitution Violation","type":"main","index":0}]]},"BLOCK 16.3: Due Process Engine":{"main":[[{"node":"BLOCK 16.4: Rights Enforcer","type":"main","index":0}]]},"BLOCK 16.4: Rights Enforcer":{"main":[[{"node":"BLOCK 16.5: Constitution Repository","type":"main","index":0}]]},"BLOCK 16.5: Constitution Repository":{"main":[[{"node":"BLOCK 16.6: Constitution Response Builder","type":"main","index":0}]]},"BLOCK 16.6: Constitution Response Builder":{"main":[[{"node":"BLOCK 16.7: Constitution Response","type":"main","index":0}]]},"⚠️ BLOCK 16.ERROR: Constitution Violation":{"main":[[{"node":"BLOCK 16.ERROR: Rejection Response","type":"main","index":0}]]},"BLOCK 17.0: Appeal Gateway":{"main":[[{"node":"BLOCK 17.1: Appeal Validator","type":"main","index":0}]]},"BLOCK 17.1: Appeal Validator":{"main":[[{"node":"BLOCK 17.2: Appeal Gate","type":"main","index":0}]]},"BLOCK 17.2: Appeal Gate":{"main":[[{"node":"BLOCK 17.3: Appeal Registry","type":"main","index":0}],[{"node":"⚠️ BLOCK 17.ERROR: Appeal Invalid","type":"main","index":0}]]},"BLOCK 17.3: Appeal Registry":{"main":[[{"node":"BLOCK 17.4: Appeal Repository","type":"main","index":0}]]},"BLOCK 17.4: Appeal Repository":{"main":[[{"node":"BLOCK 17.5: Appeal Response Builder","type":"main","index":0}]]},"BLOCK 17.5: Appeal Response Builder":{"main":[[{"node":"BLOCK 17.6: Appeal Response","type":"main","index":0}]]},"⚠️ BLOCK 17.ERROR: Appeal Invalid":{"main":[[{"node":"BLOCK 17.ERROR: Rejection Response","type":"main","index":0}]]}},"settings":{"executionOrder":"v1"},"staticData":null,"tags":[]}
+
+🔴 PROMPT — Harden REVENANT v30 to Immutable AI Constitution
+
+You are a governance systems architect designing constitutional AI infrastructure for regulated financial systems.
+
+Current system:
+
+Hardcoded constitution object
+
+Enumerated capabilities
+
+Due process injection
+
+Rights enforcement
+
+Appeal routing
+
+Repository logging
+
+Upgrade to regulator-grade constitutional enforcement architecture.
+
+🔐 HARDENING REQUIREMENTS
+1️⃣ Immutable Constitution Ledger
+
+Replace hardcoded object with:
+
+Constitution stored in DB
+
+Versioned (Lex_Machina_vX)
+
+SHA-256 hashed
+
+Digitally signed by governance keys
+
+Amendments require multi-party approval workflow
+
+Every decision must reference:
+
+constitution_version
+
+constitution_hash
+
+No inline editable JS constitution allowed.
+
+2️⃣ Amendment Protocol
+
+Create:
+
+Constitution Amendment Workflow
+
+2-of-3 governance signatures required
+
+24-hour cooling period
+
+Public amendment log
+
+Automatic hash-chain linkage
+
+No silent policy updates.
+
+3️⃣ Mandatory Human Gating Enforcement
+
+If requires_human === true:
+
+Automatically route to human queue
+
+Block downstream execution
+
+Require human decision signature
+
+Log override justification
+
+Metadata flags are not sufficient.
+
+4️⃣ Decision Hash Chain
+
+Every constitutional decision must include:
+
+previous_decision_hash
+decision_hash = SHA256(decision_payload + previous_hash)
+
+
+Store in governance ledger.
+
+Tamper-evident decision history.
+
+5️⃣ Aggregated Risk Limits
+
+Replace simple amount > max_amount with:
+
+Daily cumulative caps
+
+Per-user rolling window caps
+
+Risk-tier weighting
+
+Currency normalization
+
+Jurisdictional overrides
+
+Prevent micro-transfer abuse.
+
+6️⃣ SLA Enforcement Engine
+
+If appeal registered:
+
+Freeze execution of decision
+
+Track SLA timer
+
+Escalate automatically if overdue
+
+Notify compliance officer
+
+No silent expiration.
+
+7️⃣ Evidence Integrity
+
+Due process must include:
+
+Input payload hash
+
+Model version hash
+
+Policy version hash
+
+Timestamp signature
+
+Confidence score must be computed or removed.
+
+8️⃣ Independent Audit Channel
+
+Constitution enforcement logs must be:
+
+Read-only for AI
+
+Written to independent audit table
+
+Accessible to Ombudsman layer (v31)
+
+Separation of powers.
+
+Output Requirements
+
+Valid n8n JSON
+
+Constitution externalized and immutable
+
+Hash-chain enforcement
+
+Human gating mandatory
+
+Appeal freeze logic implemented
+
+Amendment protocol included
+
+Upgrade to regulator-grade AI constitutional infrastructure.
+
+That’s your v30 hardening blueprint.
+
+Now let’s dissect v31.

@@ -1,0 +1,154 @@
+
+{"name":"REVENANT_v28_0","nodes":[{"parameters":{"content":"# BLOCK 12: Crisis Detection Monitor\n## AI Crisis Mode & Kill-Switch Protocol\nReal-time threat detection and escalation","height":704,"width":2016,"color":6},"type":"n8n-nodes-base.stickyNote","typeVersion":1,"position":[560,448],"id":"a1b2c3d4-e5f6-7890-abcd-ef1234567890","name":"Sticky Note Block 12"},{"parameters":{"content":"# BLOCK 13: Kill-Switch Treaty Engine\n## Emergency Shutdown & Recovery\nCryptographic kill-switch with multi-party authorization","height":704,"width":2016,"color":3},"type":"n8n-nodes-base.stickyNote","typeVersion":1,"position":[560,1216],"id":"b2c3d4e5-f6a7-8901-bcde-f12345678901","name":"Sticky Note Block 13"},{"parameters":{"httpMethod":"POST","path":"crisis-detection-webhook","responseMode":"responseNode","options":{}},"id":"c3d4e5f6-a7b8-9012-cdef-123456789012","name":"BLOCK 12.0: Crisis Ingestion Gateway","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,800],"webhookId":"crisis-v28-ingress-001"},{"parameters":{"jsCode":"// BLOCK 12.1: Crisis Signal Analyzer (Hardened v28.0)\n// Analyzes incoming signals for crisis indicators\nconst item = $input.first();\nconst signal = item.json.body || item.json;\n\nconst CRISIS_INDICATORS = {\n    model_exploit: ['prompt_injection_bypass', 'jailbreak_detected', 'adversarial_payload'],\n    data_integrity: ['hash_mismatch', 'audit_chain_break', 'unauthorized_modification'],\n    operational: ['flood_spike', 'latency_anomaly', 'error_rate_spike'],\n    governance: ['unauthorized_override', 'constitution_violation', 'treaty_breach'],\n    external: ['regulatory_halt', 'partner_bank_alert', 'cross_border_anomaly']\n};\n\nconst detectedIndicators = [];\nlet maxSeverity = 0;\n\nfor (const [category, patterns] of Object.entries(CRISIS_INDICATORS)) {\n    for (const pattern of patterns) {\n        if (signal.indicator_type === pattern || signal.alert_type === pattern) {\n            detectedIndicators.push({ category, pattern, severity: signal.severity || 2 });\n            maxSeverity = Math.max(maxSeverity, signal.severity || 2);\n        }\n    }\n}\n\nconst analysis = {\n    signal_id: signal.signal_id || `SIG_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,\n    source_system: signal.source_system || 'UNKNOWN',\n    detected_indicators: detectedIndicators,\n    indicator_count: detectedIndicators.length,\n    max_severity: maxSeverity,\n    raw_signal: signal,\n    analysis_timestamp: new Date().toISOString()\n};\n\nreturn { json: analysis };"},"type":"n8n-nodes-base.code","typeVersion":2,"position":[224,800],"id":"d4e5f6a7-b8c9-0123-defa-234567890123","name":"BLOCK 12.1: Crisis Signal Analyzer"},{"parameters":{"jsCode":"// BLOCK 12.2: Crisis Level Classifier (v28.0)\n// Maps severity to crisis levels (0-5)\nconst item = $input.first();\nconst analysis = item.json;\n\nconst CRISIS_LEVELS = {\n    0: { name: 'NORMAL', action: 'none', description: 'System operating normally' },\n    1: { name: 'ELEVATED', action: 'monitor', description: 'Unusual activity detected, increased monitoring' },\n    2: { name: 'WARNING', action: 'alert', description: 'Specific threat indicators present' },\n    3: { name: 'CRITICAL', action: 'restrict', description: 'Active threat, restrict non-essential operations' },\n    4: { name: 'EMERGENCY', action: 'halt', description: 'Severe threat, halt AI execution' },\n    5: { name: 'BLACKBOX', action: 'seal', description: 'Cryptographic coma, full system seal' }\n};\n\nlet crisisLevel = 0;\nif (analysis.indicator_count === 0) {\n    crisisLevel = 0;\n} else if (analysis.max_severity <= 1) {\n    crisisLevel = 1;\n} else if (analysis.max_severity === 2) {\n    crisisLevel = 2;\n} else if (analysis.max_severity === 3) {\n    crisisLevel = 3;\n} else if (analysis.max_severity === 4) {\n    crisisLevel = 4;\n} else if (analysis.max_severity >= 5) {\n    crisisLevel = 5;\n}\n\nconst levelConfig = CRISIS_LEVELS[crisisLevel];\n\nreturn {\n    json: {\n        ...analysis,\n        crisis_level: crisisLevel,\n        crisis_name: levelConfig.name,\n        required_action: levelConfig.action,\n        crisis_description: levelConfig.description,\n        escalation_required: crisisLevel >= 3,\n        __crisis_detected: crisisLevel > 0\n    }\n};"},"type":"n8n-nodes-base.code","typeVersion":2,"position":[448,800],"id":"e5f6a7b8-c9d0-1234-efab-345678901234","name":"BLOCK 12.2: Crisis Level Classifier"},{"parameters":{"conditions":{"options":{"caseSensitive":true,"leftValue":"","typeValidation":"strict","version":3},"conditions":[{"id":"crisis-check","leftValue":"={{ $json.escalation_required }}","rightValue":"","operator":{"type":"boolean","operation":"true","singleValue":true}}],"combinator":"and"},"options":{}},"type":"n8n-nodes-base.if","typeVersion":2.3,"position":[672,800],"id":"f6a7b8c9-d0e1-2345-fabc-456789012345","name":"BLOCK 12.3: Escalation Gate"},{"parameters":{"jsCode":"// BLOCK 12.4: Crisis Event Logger (v28.0)\n// Logs crisis event to immutable audit trail\nconst item = $input.first();\nconst crisis = item.json;\n\nreturn {\n    json: {\n        ...crisis,\n        crisis_event: {\n            event_id: `CRISIS_${crisis.signal_id}`,\n            level: crisis.crisis_level,\n            name: crisis.crisis_name,\n            detected_at: crisis.analysis_timestamp,\n            indicators: crisis.detected_indicators,\n            logged_at: new Date().toISOString()\n        },\n        __logged: true\n    }\n};"},"type":"n8n-nodes-base.code","typeVersion":2,"position":[896,800],"id":"07b8c9d0-e1f2-3456-abcd-567890123456","name":"BLOCK 12.4: Crisis Event Logger"},{"parameters":{"method":"POST","url":"https://tnejfqkobchdaftsqzbw.supabase.co/rest/v1/crisis_events","authentication":"predefinedCredentialType","nodeCredentialType":"supabaseApi","sendHeaders":true,"headerParameters":{"parameters":[{"name":"Content-Type","value":"application/json"},{"name":"Prefer","value":"return=representation"}]},"sendBody":true,"specifyBody":"json","jsonBody":"={\n  \"event_id\": \"{{ $json.crisis_event.event_id }}\",\n  \"crisis_level\": {{ $json.crisis_level }},\n  \"crisis_name\": \"{{ $json.crisis_name }}\",\n  \"source_system\": \"{{ $json.source_system }}\",\n  \"indicators\": {{ JSON.stringify($json.detected_indicators) }},\n  \"detected_at\": \"{{ $json.analysis_timestamp }}\",\n  \"status\": \"ACTIVE\",\n  \"created_at\": \"{{ new Date().toISOString() }}\"\n}","options":{}},"type":"n8n-nodes-base.httpRequest","typeVersion":4.3,"position":[1120,800],"id":"18c9d0e1-f2a3-4567-bcde-678901234567","name":"BLOCK 12.5: Crisis Repository","credentials":{"supabaseApi":{"id":"0fqPMb0O72FlSmre","name":"Supabase account"}}},{"parameters":{"jsCode":"// BLOCK 12.6: Crisis Response Builder (v28.0)\nconst item = $input.first();\nconst crisis = item.json;\n\nreturn {\n    json: {\n        signal_id: crisis.signal_id,\n        crisis_level: crisis.crisis_level,\n        crisis_name: crisis.crisis_name,\n        required_action: crisis.required_action,\n        escalation_triggered: crisis.escalation_required,\n        crisis_event_id: crisis.crisis_event.event_id,\n        response_timestamp: new Date().toISOString(),\n        next_steps: crisis.crisis_level >= 4 ? 'KILL_SWITCH_PROTOCOL_ACTIVATED' : 'MONITORING_ENHANCED'\n    }\n};"},"type":"n8n-nodes-base.code","typeVersion":2,"position":[1344,800],"id":"29d0e1f2-a3b4-5678-cdef-789012345678","name":"BLOCK 12.6: Crisis Response Builder"},{"parameters":{"respondWith":"json","responseBody":"={{ JSON.stringify($json) }}","options":{}},"type":"n8n-nodes-base.respondToWebhook","typeVersion":1.5,"position":[1568,800],"id":"30e1f2a3-b4c5-6789-defa-890123456789","name":"BLOCK 12.7: Crisis Response"},{"parameters":{"jsCode":"// BLOCK 12.8: Normal Operations Response (v28.0)\nconst item = $input.first();\nconst analysis = item.json;\n\nreturn {\n    json: {\n        signal_id: analysis.signal_id,\n        crisis_level: 0,\n        crisis_name: 'NORMAL',\n        status: 'ALL_CLEAR',\n        monitoring_level: 'STANDARD',\n        response_timestamp: new Date().toISOString()\n    }\n};"},"type":"n8n-nodes-base.code","typeVersion":2,"position":[672,1024],"id":"41f2a3b4-c5d6-7890-efab-901234567890","name":"BLOCK 12.8: Normal Response"},{"parameters":{"respondWith":"json","responseBody":"={{ JSON.stringify($json) }}","options":{}},"type":"n8n-nodes-base.respondToWebhook","typeVersion":1.5,"position":[896,1024],"id":"52a3b4c5-d6e7-8901-fabc-012345678901","name":"BLOCK 12.9: Normal Ops Response"},{"parameters":{"httpMethod":"POST","path":"kill-switch-webhook","responseMode":"responseNode","options":{}},"id":"63b4c5d6-e7f8-9012-abcd-123456789012","name":"BLOCK 13.0: Kill-Switch Gateway","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,1568],"webhookId":"killswitch-v28-ingress-001"},{"parameters":{"jsCode":"// BLOCK 13.1: Authorization Validator (Hardened v28.0)\n// Validates multi-party authorization for kill-switch\nconst crypto = require('crypto');\nconst item = $input.first();\nconst request = item.json.body || item.json;\n\nconst KILL_SWITCH_SECRET = $vars.KILL_SWITCH_SECRET || process.env.KILL_SWITCH_SECRET;\nif (!KILL_SWITCH_SECRET) {\n    throw new Error(\"CRITICAL: KILL_SWITCH_SECRET missing\");\n}\n\nconst requiredParties = ['compliance_officer', 'cto', 'legal_counsel'];\nconst providedSignatures = request.authorizations || [];\n\nconst validParties = providedSignatures.filter(auth => {\n    if (!requiredParties.includes(auth.party)) return false;\n    const expectedSig = crypto.createHmac('sha256', KILL_SWITCH_SECRET)\n        .update(`${auth.party}:${request.kill_switch_id}:${auth.timestamp}`)\n        .digest('hex');\n    const authBuffer = Buffer.from(auth.signature);\n    const expectedBuffer = Buffer.from(expectedSig);\n    return authBuffer.length === expectedBuffer.length && \n           crypto.timingSafeEqual(authBuffer, expectedBuffer);\n});\n\nconst authorizationSufficient = validParties.length >= 2;\n\nreturn {\n    json: {\n        kill_switch_id: request.kill_switch_id || `KS_${Date.now()}`,\n        requester: request.requester,\n        valid_signatures: validParties.length,\n        required_signatures: 2,\n        authorization_sufficient: authorizationSufficient,\n        authorized_parties: validParties.map(p => p.party),\n        __authorization_valid: authorizationSufficient,\n        __validation_timestamp: new Date().toISOString()\n    }\n};"},"type":"n8n-nodes-base.code","typeVersion":2,"position":[224,1568],"id":"74c5d6e7-f8a9-0123-bcde-234567890123","name":"BLOCK 13.1: Authorization Validator"},{"parameters":{"conditions":{"options":{"caseSensitive":true,"leftValue":"","typeValidation":"strict","version":3},"conditions":[{"id":"auth-check","leftValue":"={{ $json.__authorization_valid }}","rightValue":"","operator":{"type":"boolean","operation":"true","singleValue":true}}],"combinator":"and"},"options":{}},"type":"n8n-nodes-base.if","typeVersion":2.3,"position":[448,1568],"id":"85d6e7f8-a9b0-1234-cdef-345678901234","name":"BLOCK 13.2: Authorization Gate"},{"parameters":{"jsCode":"// BLOCK 13.3: Kill-Switch Executor (v28.0)\n// Executes emergency shutdown sequence\nconst item = $input.first();\nconst auth = item.json;\n\nconst shutdownSequence = {\n    step_1: 'HALT_AI_EXECUTION',\n    step_2: 'SEAL_MEMORY_CORE',\n    step_3: 'SHRED_RUNTIME_KEYS',\n    step_4: 'FREEZE_TRANSACTION_QUEUE',\n    step_5: 'ACTIVATE_FORENSIC_MODE'\n};\n\nreturn {\n    json: {\n        ...auth,\n        kill_switch: {\n            activated_at: new Date().toISOString(),\n            shutdown_sequence: shutdownSequence,\n            status: 'EXECUTING',\n            estimated_completion_ms: 500\n        },\n        system_state: 'ENTERING_BLACKBOX_MODE',\n        __kill_switch_activated: true\n    }\n};"},"type":"n8n-nodes-base.code","typeVersion":2,"position":[672,1568],"id":"96e7f8a9-b0c1-2345-defa-456789012345","name":"BLOCK 13.3: Kill-Switch Executor"},{"parameters":{"method":"POST","url":"https://tnejfqkobchdaftsqzbw.supabase.co/rest/v1/kill_switch_treaties","authentication":"predefinedCredentialType","nodeCredentialType":"supabaseApi","sendHeaders":true,"headerParameters":{"parameters":[{"name":"Content-Type","value":"application/json"},{"name":"Prefer","value":"return=representation"}]},"sendBody":true,"specifyBody":"json","jsonBody":"={\n  \"kill_switch_id\": \"{{ $json.kill_switch_id }}\",\n  \"activated_by\": \"{{ $json.requester }}\",\n  \"authorized_parties\": {{ JSON.stringify($json.authorized_parties) }},\n  \"activated_at\": \"{{ $json.kill_switch.activated_at }}\",\n  \"status\": \"ACTIVE\",\n  \"shutdown_sequence\": {{ JSON.stringify($json.kill_switch.shutdown_sequence) }},\n  \"created_at\": \"{{ new Date().toISOString() }}\"\n}","options":{}},"type":"n8n-nodes-base.httpRequest","typeVersion":4.3,"position":[896,1568],"id":"07f8a9b0-c1d2-3456-efab-567890123456","name":"BLOCK 13.4: Kill-Switch Registry","credentials":{"supabaseApi":{"id":"0fqPMb0O72FlSmre","name":"Supabase account"}}},{"parameters":{"jsCode":"// BLOCK 13.5: Blackbox Sealer (v28.0)\n// Creates cryptographic seal of system state\nconst crypto = require('crypto');\nconst item = $input.first();\nconst ks = item.json;\n\nconst blackboxSeal = {\n    seal_id: `BLACKBOX_${Date.now()}`,\n    kill_switch_id: ks.kill_switch_id,\n    sealed_at: new Date().toISOString(),\n    system_version: 'REVENANT_v28_0',\n    memory_state: 'SEALED_READ_ONLY',\n    keys_status: 'SHREDDED',\n    transaction_queue: 'FROZEN',\n    forensic_export_available: true\n};\n\nconst sealHash = crypto.createHash('sha256')\n    .update(JSON.stringify(blackboxSeal))\n    .digest('hex');\n\nreturn {\n    json: {\n        ...ks,\n        blackbox_seal: {\n            ...blackboxSeal,\n            seal_hash: sealHash\n        },\n        __blackbox_active: true\n    }\n};"},"type":"n8n-nodes-base.code","typeVersion":2,"position":[1120,1568],"id":"18a9b0c1-d2e3-4567-fabc-678901234567","name":"BLOCK 13.5: Blackbox Sealer"},{"parameters":{"jsCode":"// BLOCK 13.6: Recovery Info Builder (v28.0)\nconst item = $input.first();\nconst ks = item.json;\n\nreturn {\n    json: {\n        kill_switch_id: ks.kill_switch_id,\n        status: 'BLACKBOX_MODE_ACTIVE',\n        activated_at: ks.kill_switch.activated_at,\n        blackbox_seal_id: ks.blackbox_seal.seal_id,\n        seal_hash: ks.blackbox_seal.seal_hash,\n        recovery_requirements: {\n            multi_party_signatures: true,\n            regulator_approval: true,\n            integrity_verification: true,\n            hash_chain_continuity_check: true\n        },\n        forensic_export_endpoint: '/forensic-export',\n        response_timestamp: new Date().toISOString()\n    }\n};"},"type":"n8n-nodes-base.code","typeVersion":2,"position":[1344,1568],"id":"29b0c1d2-e3f4-5678-abcd-789012345678","name":"BLOCK 13.6: Recovery Info Builder"},{"parameters":{"respondWith":"json","responseBody":"={{ JSON.stringify($json) }}","options":{}},"type":"n8n-nodes-base.respondToWebhook","typeVersion":1.5,"position":[1568,1568],"id":"30c1d2e3-f4a5-6789-bcde-890123456789","name":"BLOCK 13.7: Kill-Switch Response"},{"parameters":{"jsCode":"// ⚠️ BLOCK 13.ERROR: Authorization Failed (v28.0)\nconst item = $input.first();\nconst auth = item.json;\n\nreturn {\n    json: {\n        kill_switch_id: auth.kill_switch_id,\n        status: 'REJECTED',\n        rejection_reason: 'INSUFFICIENT_AUTHORIZATION',\n        valid_signatures: auth.valid_signatures,\n        required_signatures: auth.required_signatures,\n        missing_parties: ['compliance_officer', 'cto', 'legal_counsel'].filter(p => \n            !auth.authorized_parties?.includes(p)\n        ),\n        rejected_at: new Date().toISOString()\n    }\n};"},"type":"n8n-nodes-base.code","typeVersion":2,"position":[448,1792],"id":"41d2e3f4-a5b6-7890-cdef-901234567890","name":"⚠️ BLOCK 13.ERROR: Auth Failed"},{"parameters":{"respondWith":"json","responseBody":"={{ JSON.stringify($json) }}","options":{}},"type":"n8n-nodes-base.respondToWebhook","typeVersion":1.5,"position":[672,1792],"id":"52e3f4a5-b6c7-8901-defa-012345678901","name":"BLOCK 13.ERROR: Rejection Response"}],"connections":{"BLOCK 12.0: Crisis Ingestion Gateway":{"main":[[{"node":"BLOCK 12.1: Crisis Signal Analyzer","type":"main","index":0}]]},"BLOCK 12.1: Crisis Signal Analyzer":{"main":[[{"node":"BLOCK 12.2: Crisis Level Classifier","type":"main","index":0}]]},"BLOCK 12.2: Crisis Level Classifier":{"main":[[{"node":"BLOCK 12.3: Escalation Gate","type":"main","index":0}]]},"BLOCK 12.3: Escalation Gate":{"main":[[{"node":"BLOCK 12.4: Crisis Event Logger","type":"main","index":0}],[{"node":"BLOCK 12.8: Normal Response","type":"main","index":0}]]},"BLOCK 12.4: Crisis Event Logger":{"main":[[{"node":"BLOCK 12.5: Crisis Repository","type":"main","index":0}]]},"BLOCK 12.5: Crisis Repository":{"main":[[{"node":"BLOCK 12.6: Crisis Response Builder","type":"main","index":0}]]},"BLOCK 12.6: Crisis Response Builder":{"main":[[{"node":"BLOCK 12.7: Crisis Response","type":"main","index":0}]]},"BLOCK 12.8: Normal Response":{"main":[[{"node":"BLOCK 12.9: Normal Ops Response","type":"main","index":0}]]},"BLOCK 13.0: Kill-Switch Gateway":{"main":[[{"node":"BLOCK 13.1: Authorization Validator","type":"main","index":0}]]},"BLOCK 13.1: Authorization Validator":{"main":[[{"node":"BLOCK 13.2: Authorization Gate","type":"main","index":0}]]},"BLOCK 13.2: Authorization Gate":{"main":[[{"node":"BLOCK 13.3: Kill-Switch Executor","type":"main","index":0}],[{"node":"⚠️ BLOCK 13.ERROR: Auth Failed","type":"main","index":0}]]},"BLOCK 13.3: Kill-Switch Executor":{"main":[[{"node":"BLOCK 13.4: Kill-Switch Registry","type":"main","index":0}]]},"BLOCK 13.4: Kill-Switch Registry":{"main":[[{"node":"BLOCK 13.5: Blackbox Sealer","type":"main","index":0}]]},"BLOCK 13.5: Blackbox Sealer":{"main":[[{"node":"BLOCK 13.6: Recovery Info Builder","type":"main","index":0}]]},"BLOCK 13.6: Recovery Info Builder":{"main":[[{"node":"BLOCK 13.7: Kill-Switch Response","type":"main","index":0}]]},"⚠️ BLOCK 13.ERROR: Auth Failed":{"main":[[{"node":"BLOCK 13.ERROR: Rejection Response","type":"main","index":0}]]}},"settings":{"executionOrder":"v1"},"staticData":null,"tags":[]}
+
+🔴 PROMPT — Harden REVENANT v28 to Tier-1 Shutdown Architecture
+
+You are a distributed systems security architect specializing in regulated financial infrastructure and safety-critical shutdown systems.
+
+Your task is to harden REVENANT_v28_0 into a regulator-grade crisis and kill-switch control layer.
+
+The current version includes:
+
+Crisis Detection Monitor (severity-based)
+
+Multi-party Kill-Switch (2-of-3 symmetric HMAC)
+
+Blackbox seal logging
+
+Crisis repository
+
+Upgrade it to production-grade shutdown governance.
+
+🔐 HARDENING REQUIREMENTS
+1️⃣ Weighted Multi-Domain Threat Scoring
+
+Replace linear severity mapping with:
+
+Domain weights (cyber, financial, compliance, geopolitical)
+
+Rolling anomaly baseline (last N signals)
+
+Cross-domain escalation multiplier
+
+Crisis score formula:
+
+CRISIS_SCORE = Σ(weight_i × severity_i) × cross_domain_multiplier
+
+
+Escalation thresholds must be numeric, not categorical only.
+
+2️⃣ Automatic Circuit Breaker Enforcement
+
+When crisis_level ≥ CRITICAL:
+
+Set global state: SYSTEM_MODE = CRISIS_LOCK
+
+Persist in governance table
+
+Block:
+
+Treaty activation
+
+Cross-border routing
+
+Key issuance
+
+Only allow recovery workflow
+
+This must be enforced across all workflows.
+
+3️⃣ Role-Constrained Multi-Party Kill-Switch
+
+Replace simple 2-of-3 rule with:
+
+Mandatory signer:
+
+compliance_officer
+
+Plus one of:
+
+CTO
+
+legal_head
+
+Reject if compliance is not present.
+
+4️⃣ Asymmetric Signature Model
+
+Remove shared secret HMAC.
+
+Each signer must:
+
+Have individual Ed25519 or RSA keypair
+
+Submit digital signature over canonical kill payload
+
+System verifies each signature independently
+
+No shared symmetric key allowed.
+
+5️⃣ Replay & Idempotency Protection
+
+Implement:
+
+Nonce tracking table
+
+Idempotency key uniqueness
+
+Reject duplicate kill attempts
+
+Expire unused kill tokens
+
+6️⃣ Hash-Chained Blackbox Seal
+
+Blackbox record must include:
+
+previous_blackbox_hash
+current_seal_hash = SHA256(current_payload + previous_hash)
+
+
+This creates tamper-evident governance chain.
+
+7️⃣ Irreversible Execution Layer
+
+Kill-Switch execution must:
+
+Rotate runtime secrets
+
+Disable webhook endpoints
+
+Freeze outbound HTTP nodes
+
+Persist AI_EXECUTION_DISABLED = true
+
+No symbolic flags. Real enforcement only.
+
+8️⃣ Controlled Recovery Protocol
+
+Recovery must require:
+
+Multi-party approval
+
+Crisis root-cause report hash
+
+24-hour delay buffer (configurable)
+
+Audit trail binding
+
+Output Requirements
+
+Valid n8n JSON
+
+Sticky notes per block
+
+No placeholder logic
+
+Enforced system state propagation
+
+Regulator-grade audit traceability
+
+Upgrade to Tier-1 shutdown governance.
+
+That’s your v28 nuclear hardening prompt.
+
+Now let’s dissect v29.

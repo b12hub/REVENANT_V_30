@@ -1,0 +1,10 @@
+/home/bobur/Revenant/revenant-engine/target/debug/deps/galvanic_assert-8b15beac84b49fc3.d: /home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/galvanic-assert-0.8.7/src/lib.rs /home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/galvanic-assert-0.8.7/src/matchers/mod.rs /home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/galvanic-assert-0.8.7/src/matchers/core.rs /home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/galvanic-assert-0.8.7/src/matchers/combinators.rs /home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/galvanic-assert-0.8.7/src/matchers/variant.rs /home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/galvanic-assert-0.8.7/src/matchers/collection.rs
+
+/home/bobur/Revenant/revenant-engine/target/debug/deps/libgalvanic_assert-8b15beac84b49fc3.rmeta: /home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/galvanic-assert-0.8.7/src/lib.rs /home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/galvanic-assert-0.8.7/src/matchers/mod.rs /home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/galvanic-assert-0.8.7/src/matchers/core.rs /home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/galvanic-assert-0.8.7/src/matchers/combinators.rs /home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/galvanic-assert-0.8.7/src/matchers/variant.rs /home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/galvanic-assert-0.8.7/src/matchers/collection.rs
+
+/home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/galvanic-assert-0.8.7/src/lib.rs:
+/home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/galvanic-assert-0.8.7/src/matchers/mod.rs:
+/home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/galvanic-assert-0.8.7/src/matchers/core.rs:
+/home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/galvanic-assert-0.8.7/src/matchers/combinators.rs:
+/home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/galvanic-assert-0.8.7/src/matchers/variant.rs:
+/home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/galvanic-assert-0.8.7/src/matchers/collection.rs:

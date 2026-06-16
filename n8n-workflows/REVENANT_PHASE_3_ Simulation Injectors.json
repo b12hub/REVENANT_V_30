@@ -1,0 +1,90 @@
+{
+  "name": "REVENANT_PHASE_3: Simulation Injectors",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "simulate",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -32,
+        0
+      ],
+      "id": "7d92238a-f24e-4597-9de6-b6ce72d6d693",
+      "name": "Webhook",
+      "webhookId": "915434bb-25a9-4413-8a63-db1d374be2c4"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Sprint 3.2 – Simulation Payload Generator\n// Reads `scenario` from input and generates an array of\n// mock banking requests to feed into Phase 1's ingress webhook.\n// ============================================================\n\n// Helper: random integer between min and max (inclusive)\nconst randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;\n\n// Helper: generate a simple user ID (e.g., USR-123456)\nconst generateUserId = () => 'USR-' + randInt(100000, 999999).toString();\n\n// Read the scenario from the first item's JSON (or default to STANDARD)\nconst scenario = $input.first().json.body.scenario || 'STANDARD';\n\nlet payloadArray = [];\n\n// ============================================================\n// 1. Build the payload array based on scenario\n// ============================================================\nif (scenario === 'STANDARD') {\n  // --- 20 low‑risk transactions with random messages ---\n  const messagesPool = ['transfer', 'send money', 'check balance', 'hello', 'pay vendor'];\n  \n  for (let i = 0; i < 20; i++) {\n    payloadArray.push({\n      user_id: generateUserId(),\n      amount: randInt(5000, 8000000),   // 5k – 8M UZS\n      message: messagesPool[Math.floor(Math.random() * messagesPool.length)]\n    });\n  }\n}\nelse if (scenario === 'FRAUD') {\n  // --- 2 transactions guaranteed to hit the Hard Firewall (60M UZS) ---\n  for (let i = 0; i < 2; i++) {\n    payloadArray.push({\n      user_id: generateUserId(),\n      amount: 60000000, \n      message: 'transfer'\n    });\n  }\n  // --- 3 transactions that require Human-in-the-Loop Telegram Approval (25M UZS) ---\n  for (let i = 0; i < 3; i++) {\n    payloadArray.push({\n      user_id: generateUserId(),\n      amount: 25000000, \n      message: 'urgent transfer'\n    });\n  }\n}\nelse if (scenario === 'FAILED_PAYMENT') {\n  // --- 3 failed refund scenarios ---\n  for (let i = 0; i < 3; i++) {\n    payloadArray.push({\n      user_id: generateUserId(),\n      amount: 150000,\n      message: 'failed refund'\n    });\n  }\n}\nelse {\n  // Unknown scenario – return empty or a fallback? We'll return one generic item to avoid breaking.\n  payloadArray.push({\n    user_id: 'UNKNOWN',\n    amount: 0,\n    message: 'unknown scenario'\n  });\n}\n\n// ============================================================\n// 2. Map each item into an n8n compatible output\n//    This ensures the next HTTP Request node processes\n//    each payload individually.\n// ============================================================\n// --- HOW TO CONNECT TO PHASE 1 WEBHOOK ---\n// After this node, add an \"HTTP Request\" node.\n// Method: POST\n// URL: <your_phase1_webhook_url>\n// Body Content Type: JSON\n// Body (using expressions):\n//   {\n//     \"user_id\": \"{{ $json.user_id }}\",\n//     \"amount\": {{ $json.amount }},\n//     \"message\": \"{{ $json.message }}\"\n//   }\n// The node will automatically loop through all generated items.\n// ------------------------------------------\n\nreturn payloadArray.map(item => ({ json: item }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "45f67735-f771-4008-a898-161fdb62f495",
+      "name": "Sprint 3.2 – Simulation Payload Generator"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://notheros.app.n8n.cloud/webhook-test/453f4455-2b49-4472-b950-3f40ac2b50a4",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        416,
+        0
+      ],
+      "id": "4ca0d6a7-c329-42aa-9361-b8e273f5e484",
+      "name": "HTTP Request"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Sprint 3.2 – Simulation Payload Generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sprint 3.2 – Simulation Payload Generator": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "83bb6753-67dd-48c5-8c9f-64d3245cc72e",
+  "meta": {
+    "instanceId": "78c6a364e8ea556c4441f54ffc3b18dfc6557a3412b75e7187eae4ac0d914297"
+  },
+  "id": "hKS6z6z66id4Tj9Z",
+  "tags": []
+}

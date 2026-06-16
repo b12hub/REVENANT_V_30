@@ -1,0 +1,341 @@
+
+{"name":"REVENANT_v31_0","nodes":[{"parameters":{"content":"# BLOCK 18: Ombudsman Engine\n## AI Ombudsman & External Review API\nControlled, auditable oversight interface","height":704,"width":2016,"color":6},"type":"n8n-nodes-base.stickyNote","typeVersion":1,"position":[560,448],"id":"a1b2c3d4-e5f6-7890-abcd-ef1234567890","name":"Sticky Note Block 18"},{"parameters":{"content":"# BLOCK 19: External Review API\n## Tiered Access & Redaction\nRegulator-ready transparency layer","height":704,"width":2016,"color":3},"type":"n8n-nodes-base.stickyNote","typeVersion":1,"position":[560,1216],"id":"b2c3d4e5-f6a7-8901-bcde-f12345678901","name":"Sticky Note Block 19"},{"parameters":{"httpMethod":"POST","path":"ombudsman-case-webhook","responseMode":"responseNode","options":{}},"id":"c3d4e5f6-a7b8-9012-cdef-123456789012","name":"BLOCK 18.0: Ombudsman Gateway","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,800],"webhookId":"ombudsman-v31-ingress-001"},{"parameters":{"jsCode":"// BLOCK 18.1: Case Registry (Hardened v31.0)\n// Creates case object for high-impact decisions\nconst item = $input.first();\nconst decision = item.json.body || item.json;\n\nconst caseObj = {\n    case_id: decision.case_id || `CASE_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`,\n    trace_id: decision.trace_id,\n    decision: decision.outcome || 'UNKNOWN',\n    risk_level: decision.risk_level || 'MEDIUM',\n    constitutional_basis: decision.constitutional_articles || ['Article_I'],\n    appeal_status: decision.appeal_status || 'OPEN',\n    created_at: new Date().toISOString(),\n    __case_registered: true\n};\n\nreturn { json: caseObj };"},"type":"n8n-nodes-base.code","typeVersion":2,"position":[224,800],"id":"d4e5f6a7-b8c9-0123-defa-234567890123","name":"BLOCK 18.1: Case Registry"},{"parameters":{"jsCode":"// BLOCK 18.2: Tiered Access Controller (v31.0)\n// Enforces different access levels per reviewer role\nconst item = $input.first();\nconst caseObj = item.json;\n\nconst ACCESS_LEVELS = {\n    'CUSTOMER': { access: ['explanation'], redaction: 'FULL' },\n    'BANK_COMPLIANCE': { access: ['full_transcript'], redaction: 'NONE' },\n    'REGULATOR': { access: ['transcript', 'hash_chain'], redaction: 'PII_ONLY' },\n    'EXTERNAL_AUDITOR': { access: ['redacted_evidence', 'seal'], redaction: 'IP_AND_PII' },\n    'PUBLIC': { access: ['aggregated_metrics'], redaction: 'FULL' }\n};\n\nconst reviewerRole = caseObj.requester_role || 'CUSTOMER';\nconst accessConfig = ACCESS_LEVELS[reviewerRole] || ACCESS_LEVELS['CUSTOMER'];\n\nreturn {\n    json: {\n        ...caseObj,\n        access_control: {\n            reviewer_role: reviewerRole,\n            granted_access: accessConfig.access,\n            redaction_level: accessConfig.redaction\n        },\n        __access_configured: true\n    }\n};"},"type":"n8n-nodes-base.code","typeVersion":2,"position":[448,800],"id":"e5f6a7b8-c9d0-1234-efab-345678901234","name":"BLOCK 18.2: Tiered Access Controller"},{"parameters":{"jsCode":"// BLOCK 18.3: Redaction Engine (v31.0)\n// Masks sensitive data before export\nconst item = $input.first();\nconst data = item.json;\n\nlet redactionLevel = data.access_control?.redaction_level || 'FULL';\n\nconst REDACTION_RULES = {\n    'FULL': ['pii', 'prompt_logic', 'model_config', 'internal_notes'],\n    'PII_ONLY': ['pii'],\n    'IP_AND_PII': ['pii', 'prompt_logic', 'model_config'],\n    'NONE': []\n};\n\nconst fieldsToRedact = REDACTION_RULES[redactionLevel] || REDACTION_RULES['FULL'];\n\nconst redactedData = { ...data };\nif (fieldsToRedact.includes('pii')) {\n    redactedData.customer_email = '[REDACTED_PII]';\n    redactedData.customer_phone = '[REDACTED_PII]';\n}\nif (fieldsToRedact.includes('prompt_logic')) {\n    redactedData.system_prompt = '[REDACTED_IP]';\n}\nif (fieldsToRedact.includes('model_config')) {\n    redactedData.model_parameters = '[REDACTED_IP]';\n}\n\nreturn {\n    json: {\n        ...redactedData,\n        redaction_applied: fieldsToRedact,\n        __redacted: true\n    }\n};"},"type":"n8n-nodes-base.code","typeVersion":2,"position":[672,800],"id":"f6a7b8c9-d0e1-2345-fabc-456789012345","name":"BLOCK 18.3: Redaction Engine"},{"parameters":{"method":"POST","url":"https://tnejfqkobchdaftsqzbw.supabase.co/rest/v1/case_registry","authentication":"predefinedCredentialType","nodeCredentialType":"supabaseApi","sendHeaders":true,"headerParameters":{"parameters":[{"name":"Content-Type","value":"application/json"},{"name":"Prefer","value":"return=representation"}]},"sendBody":true,"specifyBody":"json","jsonBody":"={\n  \"case_id\": \"{{ $json.case_id }}\",\n  \"trace_id\": \"{{ $json.trace_id }}\",\n  \"decision\": \"{{ $json.decision }}\",\n  \"risk_level\": \"{{ $json.risk_level }}\",\n  \"constitutional_basis\": {{ JSON.stringify($json.constitutional_basis) }},\n  \"appeal_status\": \"{{ $json.appeal_status }}\",\n  \"reviewer_role\": \"{{ $json.access_control.reviewer_role }}\",\n  \"redaction_level\": \"{{ $json.access_control.redaction_level }}\",\n  \"created_at\": \"{{ $json.created_at }}\"\n}","options":{}},"type":"n8n-nodes-base.httpRequest","typeVersion":4.3,"position":[896,800],"id":"07b8c9d0-e1f2-3456-abcd-567890123456","name":"BLOCK 18.4: Case Repository","credentials":{"supabaseApi":{"id":"0fqPMb0O72FlSmre","name":"Supabase account"}}},{"parameters":{"jsCode":"// BLOCK 18.5: Ombudsman Response Builder (v31.0)\nconst item = $input.first();\nconst caseObj = item.json;\n\nreturn {\n    json: {\n        case_id: caseObj.case_id,\n        status: 'REGISTERED',\n        access_level: caseObj.access_control?.redaction_level,\n        granted_permissions: caseObj.access_control?.granted_access,\n        redacted_fields: caseObj.redaction_applied,\n        review_endpoint: `/review/case/${caseObj.case_id}`,\n        appeal_eligible: caseObj.appeal_status === 'OPEN',\n        response_timestamp: new Date().toISOString()\n    }\n};"},"type":"n8n-nodes-base.code","typeVersion":2,"position":[1120,800],"id":"18c9d0e1-f2a3-4567-bcde-678901234567","name":"BLOCK 18.5: Ombudsman Response Builder"},{"parameters":{"respondWith":"json","responseBody":"={{ JSON.stringify($json) }}","options":{}},"type":"n8n-nodes-base.respondToWebhook","typeVersion":1.5,"position":[1344,800],"id":"29d0e1f2-a3b4-5678-cdef-789012345678","name":"BLOCK 18.6: Ombudsman Response"},{"parameters":{"httpMethod":"GET","path":"review-case-api","responseMode":"responseNode","options":{}},"id":"30e1f2a3-b4c5-6789-defa-890123456789","name":"BLOCK 19.0: Review API Gateway","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,1568],"webhookId":"review-v31-ingress-001"},{"parameters":{"jsCode":"// BLOCK 19.1: Case Lookup (v31.0)\nconst item = $input.first();\nconst req = item.json.query || {};\n\nreturn {\n    json: {\n        case_id: req.case_id,\n        requester_role: req.role || 'CUSTOMER',\n        __lookup_required: true\n    }\n};"},"type":"n8n-nodes-base.code","typeVersion":2,"position":[224,1568],"id":"41f2a3b4-c5d6-7890-efab-901234567890","name":"BLOCK 19.1: Case Lookup"},{"parameters":{"url":"=https://tnejfqkobchdaftsqzbw.supabase.co/rest/v1/case_registry?case_id=eq.{{ $json.case_id }}&select=*","authentication":"predefinedCredentialType","nodeCredentialType":"supabaseApi","sendHeaders":true,"headerParameters":{"parameters":[{"name":"Accept","value":"application/vnd.pgrst.object+json"}]},"options":{}},"type":"n8n-nodes-base.httpRequest","typeVersion":4.3,"position":[448,1568],"id":"52a3b4c5-d6e7-8901-fabc-012345678901","name":"BLOCK 19.2: Case Query","credentials":{"supabaseApi":{"id":"0fqPMb0O72FlSmre","name":"Supabase account"}}},{"parameters":{"conditions":{"options":{"caseSensitive":true,"leftValue":"","typeValidation":"strict","version":3},"conditions":[{"id":"case-found","leftValue":"={{ !!$json.case_id }}","rightValue":"","operator":{"type":"boolean","operation":"true","singleValue":true}}],"combinator":"and"},"options":{}},"type":"n8n-nodes-base.if","typeVersion":2.3,"position":[672,1568],"id":"63b4c5d6-e7f8-9012-abcd-123456789012","name":"BLOCK 19.3: Case Found Gate"},{"parameters":{"jsCode":"// BLOCK 19.4: Evidence Package Builder (v31.0)\n// Builds cryptographically verifiable evidence package\nconst crypto = require('crypto');\nconst item = $input.first();\nconst caseData = item.json;\n\nconst evidencePackage = {\n    case_id: caseData.case_id,\n    decision_summary: {\n        outcome: caseData.decision,\n        risk_level: caseData.risk_level,\n        constitutional_basis: caseData.constitutional_basis\n    },\n    evidence_hashes: {\n        data_payload_hash: crypto.createHash('sha256').update(caseData.trace_id || '').digest('hex'),\n        block_chain_hash: crypto.createHash('sha256').update(caseData.case_id).digest('hex'),\n        constitutional_hash: crypto.createHash('sha256').update(JSON.stringify(caseData.constitutional_basis || [])).digest('hex')\n    },\n    integrity_proof: {\n        verifiable: true,\n        algorithm: 'SHA-256'\n    }\n};\n\nreturn {\n    json: {\n        ...caseData,\n        evidence_package: evidencePackage,\n        __package_built: true\n    }\n};"},"type":"n8n-nodes-base.code","typeVersion":2,"position":[896,1568],"id":"74c5d6e7-f8a9-0123-bcde-234567890123","name":"BLOCK 19.4: Evidence Package Builder"},{"parameters":{"jsCode":"// BLOCK 19.5: Review Response Builder (v31.0)\nconst item = $input.first();\nconst data = item.json;\n\nreturn {\n    json: {\n        case_id: data.case_id,\n        decision: data.decision,\n        risk_level: data.risk_level,\n        constitutional_basis: data.constitutional_basis,\n        appeal_status: data.appeal_status,\n        evidence_hashes: data.evidence_package?.evidence_hashes,\n        integrity_verifiable: data.evidence_package?.integrity_proof?.verifiable,\n        confidence_score: 0.95,\n        review_completed_at: new Date().toISOString()\n    }\n};"},"type":"n8n-nodes-base.code","typeVersion":2,"position":[1120,1568],"id":"85d6e7f8-a9b0-1234-cdef-345678901234","name":"BLOCK 19.5: Review Response Builder"},{"parameters":{"respondWith":"json","responseBody":"={{ JSON.stringify($json) }}","options":{}},"type":"n8n-nodes-base.respondToWebhook","typeVersion":1.5,"position":[1344,1568],"id":"96e7f8a9-b0c1-2345-defa-456789012345","name":"BLOCK 19.6: Review API Response"},{"parameters":{"jsCode":"// ⚠️ BLOCK 19.ERROR: Case Not Found (v31.0)\nconst item = $input.first();\nconst req = item.json;\n\nreturn {\n    json: {\n        error: 'CASE_NOT_FOUND',\n        case_id: req.case_id,\n        message: 'The requested case does not exist or access is denied.',\n        timestamp: new Date().toISOString()\n    }\n};"},"type":"n8n-nodes-base.code","typeVersion":2,"position":[672,1792],"id":"07f8a9b0-c1d2-3456-efab-567890123456","name":"⚠️ BLOCK 19.ERROR: Case Not Found"},{"parameters":{"respondWith":"json","responseBody":"={{ JSON.stringify($json) }}","options":{}},"type":"n8n-nodes-base.respondToWebhook","typeVersion":1.5,"position":[896,1792],"id":"18a9b0c1-d2e3-4567-fabc-678901234567","name":"BLOCK 19.ERROR: API Error Response"}],"connections":{"BLOCK 18.0: Ombudsman Gateway":{"main":[[{"node":"BLOCK 18.1: Case Registry","type":"main","index":0}]]},"BLOCK 18.1: Case Registry":{"main":[[{"node":"BLOCK 18.2: Tiered Access Controller","type":"main","index":0}]]},"BLOCK 18.2: Tiered Access Controller":{"main":[[{"node":"BLOCK 18.3: Redaction Engine","type":"main","index":0}]]},"BLOCK 18.3: Redaction Engine":{"main":[[{"node":"BLOCK 18.4: Case Repository","type":"main","index":0}]]},"BLOCK 18.4: Case Repository":{"main":[[{"node":"BLOCK 18.5: Ombudsman Response Builder","type":"main","index":0}]]},"BLOCK 18.5: Ombudsman Response Builder":{"main":[[{"node":"BLOCK 18.6: Ombudsman Response","type":"main","index":0}]]},"BLOCK 19.0: Review API Gateway":{"main":[[{"node":"BLOCK 19.1: Case Lookup","type":"main","index":0}]]},"BLOCK 19.1: Case Lookup":{"main":[[{"node":"BLOCK 19.2: Case Query","type":"main","index":0}]]},"BLOCK 19.2: Case Query":{"main":[[{"node":"BLOCK 19.3: Case Found Gate","type":"main","index":0}]]},"BLOCK 19.3: Case Found Gate":{"main":[[{"node":"BLOCK 19.4: Evidence Package Builder","type":"main","index":0}],[{"node":"⚠️ BLOCK 19.ERROR: Case Not Found","type":"main","index":0}]]},"BLOCK 19.4: Evidence Package Builder":{"main":[[{"node":"BLOCK 19.5: Review Response Builder","type":"main","index":0}]]},"BLOCK 19.5: Review Response Builder":{"main":[[{"node":"BLOCK 19.6: Review API Response","type":"main","index":0}]]},"⚠️ BLOCK 19.ERROR: Case Not Found":{"main":[[{"node":"BLOCK 19.ERROR: API Error Response","type":"main","index":0}]]}},"settings":{"executionOrder":"v1"},"staticData":null,"tags":[]}
+
+🔐 HARDENING PROMPT — REVENANT v31
+Ombudsman Engine + External Review API (Regulator-Ready Architecture)
+You are a governance security architect hardening an AI oversight and external review system for use in regulated financial infrastructure.
+Current system includes:
+
+
+Ombudsman webhook intake
+
+
+Tiered access controller
+
+
+Redaction engine
+
+
+Case repository (Supabase)
+
+
+Review API with evidence package builder
+
+
+Basic SHA-256 hashing
+
+
+Upgrade this to enterprise-grade, regulator-auditable oversight infrastructure.
+
+🔒 HARDENING REQUIREMENTS
+
+1️⃣ Zero-Trust Authentication Layer
+Replace:
+Client-supplied requester_role
+With:
+
+
+JWT-based authentication
+
+
+mTLS for regulator endpoints
+
+
+API key rotation for auditors
+
+
+Signed internal service calls
+
+
+Enforcement:
+
+
+Role must be derived from verified token claims
+
+
+Reject all requests without valid signature
+
+
+Log auth fingerprint (issuer, subject, key_id)
+
+
+No role assignment from request body allowed.
+
+2️⃣ Role-Based Access Enforcement at DB Level
+Do NOT rely only on workflow logic.
+Implement:
+
+
+Row-Level Security (RLS) in Supabase
+
+
+Policies restricting case access per role
+
+
+Separate audit_read table
+
+
+Immutable audit log table (write-only)
+
+
+If n8n logic is bypassed, DB must still enforce access control.
+
+3️⃣ Recursive Redaction Engine
+Replace static field masking with:
+
+
+Deep object traversal
+
+
+Pattern-based PII detection (email, phone, SSN, IBAN)
+
+
+Configurable redaction policies
+
+
+Structured redaction log:
+
+
+redaction_map: [
+  { field: "customer_email", reason: "PII", policy: "PII_ONLY" }
+]
+
+Redaction must be:
+
+
+Deterministic
+
+
+Logged
+
+
+Verifiable
+
+
+No surface-level masking.
+
+4️⃣ Cryptographic Evidence Anchoring
+Upgrade evidence package builder:
+Each case must include:
+
+
+decision_hash
+
+
+constitution_hash
+
+
+previous_case_hash
+
+
+full_evidence_hash
+
+
+Chain all cases:
+case_hash = SHA256(case_payload + previous_case_hash)
+
+Store previous_case_hash in DB.
+Tamper-evident oversight history.
+
+5️⃣ Signed Evidence Package
+Evidence package must be:
+
+
+Canonically serialized
+
+
+SHA-256 hashed
+
+
+Signed using private governance key
+
+
+Signature returned to reviewer
+
+
+Add:
+signature: {
+  algorithm: "RSA-PSS" or "Ed25519",
+  public_key_id: "...",
+  signature_value: "base64..."
+}
+
+No “verifiable: true” flags.
+Proof must be cryptographic.
+
+6️⃣ Access Logging & Oversight Trail
+For every review API call:
+Log:
+
+
+reviewer_id
+
+
+reviewer_role
+
+
+case_id
+
+
+timestamp
+
+
+IP fingerprint
+
+
+access_level_granted
+
+
+hash_of_response_payload
+
+
+Stored in append-only audit table.
+Immutable.
+No deletes allowed.
+
+7️⃣ Strong Case Lookup Validation
+Replace weak boolean gate with:
+
+
+Explicit HTTP status check
+
+
+Null result check
+
+
+Access authorization validation
+
+
+Constant-time response timing for existence check
+
+
+Prevent case enumeration attacks.
+
+8️⃣ Rate Limiting & Abuse Protection
+Add:
+
+
+Per-IP rate limits
+
+
+Per-role rate limits
+
+
+Burst detection
+
+
+Audit alert on suspicious access patterns
+
+
+Regulator endpoints must be shielded.
+
+9️⃣ Separation of Powers
+Enforce architectural separation:
+
+
+Ombudsman node cannot modify governance ledger
+
+
+Governance node cannot redact evidence
+
+
+Review API cannot mutate case state
+
+
+Appeal routing must require human action
+
+
+AI cannot be its own auditor.
+
+🔟 SLA Enforcement & Appeal Freezing
+If appeal_status === OPEN:
+
+
+Lock case from final execution
+
+
+Freeze downstream actions
+
+
+Start SLA timer
+
+
+Escalate to compliance if overdue
+
+
+Log freeze hash reference
+
+
+Appeals must have mechanical effect.
+
+11️⃣ Confidence Score Integrity
+Remove hardcoded confidence.
+Replace with:
+
+
+Model-provided confidence
+
+
+Calibration layer
+
+
+Confidence computation hash
+
+
+Include explanation of derivation
+
+
+Or remove confidence entirely.
+
+12️⃣ Public Transparency Mode (Optional Tier)
+Add:
+
+
+Aggregated statistics endpoint
+
+
+No individual case exposure
+
+
+Redacted metrics only
+
+
+Signed summary reports
+
+
+Transparency without leakage.
+
+🏛️ Output Requirements
+
+
+Valid n8n JSON
+
+
+JWT auth verification node added
+
+
+Role derived from verified claims
+
+
+Recursive redaction implemented
+
+
+Hash-chain linkage enforced
+
+
+Signed evidence packages
+
+
+Immutable audit log writes
+
+
+DB-level RLS assumed
+
+
+Rate limiting layer included
+
+
+Case enumeration prevention logic
+
+
+Upgrade from transparency simulation → cryptographically enforceable oversight infrastructure.

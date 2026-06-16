@@ -1,0 +1,159 @@
+{
+  "name": "REVENANT_PHASE_4: HITL Resolution",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "callback_query"
+        ],
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        80,
+        -96
+      ],
+      "id": "c8752dd5-daa7-4a5c-a3f2-17f1f9527ebd",
+      "name": "Telegram Trigger",
+      "webhookId": "bba2e28e-a1db-4098-a965-8b6a4b9a89c0",
+      "credentials": {
+        "telegramApi": {
+          "id": "cvMLNgGEw4hRmno0",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract the payload from the Telegram Trigger\nconst payload = $input.first().json;\n\n// Navigate into the callback_query object where Telegram hides the data\nconst query = payload.callback_query; \n\n// Extract the action and user ID (e.g., \"approve_USR-667856\")\nconst callbackData = query.data; \nconst [action, userId] = callbackData.split('_');\n\n// Determine the response text\nlet responseText = '';\nif (action === 'approve') {\n  responseText = `✅ *AUTHORIZED*\n  *User:* ID-${userId}\n  *Status:* Cleared for execution by supervisor.`;\n} else {\n  responseText = `❌ *DENIED*\n  *User:* ID-${userId}\n  *Status:* Blocked and logged by supervisor.`;\n}\n\nreturn {\n  json: {\n    chat_id: query.message.chat.id,\n    message_id: query.message.message_id,\n    callback_query_id: query.id,\n    new_text: responseText,\n    action: action\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        304,
+        -96
+      ],
+      "id": "0e670108-82b7-4bfd-b894-65bbc0489911",
+      "name": "Process Decision"
+    },
+    {
+      "parameters": {
+        "operation": "editMessageText",
+        "chatId": "={{ $json.chat_id }}",
+        "messageId": "={{ $json.message_id }}",
+        "text": "={{ $json.new_text }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        528,
+        -240
+      ],
+      "id": "84696e23-286d-46d1-8f69-05dc398f2583",
+      "name": "Update Chat Message",
+      "webhookId": "f348f552-0871-4f82-8af6-924b9e2efd5b",
+      "credentials": {
+        "telegramApi": {
+          "id": "cvMLNgGEw4hRmno0",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{$vars.Telegram_BOT_Token}}/answerCallbackQuery",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "chat_id",
+              "value": "={{ $json.chat_id }}"
+            },
+            {
+              "name": "message_id",
+              "value": "={{ $json.message_id }}"
+            },
+            {
+              "name": "callback_query_id",
+              "value": "={{ $json.callback_query_id }}"
+            },
+            {
+              "name": "new_text",
+              "value": "={{ $json.new_text }}"
+            },
+            {
+              "name": "action",
+              "value": "={{ $json.action }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Stop Button Spinner1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        528,
+        -96
+      ],
+      "id": "75385f70-e34f-4082-a28f-63de3961c48f"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Process Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Decision": {
+      "main": [
+        [
+          {
+            "node": "Stop Button Spinner1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Update Chat Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stop Button Spinner1": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "4b665384-e67c-4006-87d8-f6a9b988b818",
+  "meta": {
+    "instanceId": "78c6a364e8ea556c4441f54ffc3b18dfc6557a3412b75e7187eae4ac0d914297"
+  },
+  "id": "xEEz9t0NOUkaeH3z",
+  "tags": []
+}

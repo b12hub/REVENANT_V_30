@@ -1,0 +1,489 @@
+{
+  "name": "REVENANT_PHASE_1: Ingress & Triage",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Phase 1.1 – Ingress & Deterministic Intent Detection\n// Place this code in an n8n Code Node directly after a Webhook.\n// It normalises the incoming payload and classifies the intent\n// using strict keyword/regex matching (no LLMs).\n// ============================================================\n\n// 1. Safely extract the body from the first incoming item\nconst body = $input.first()?.json?.body || {};\n\n// 2. Normalise fields – always provide safe defaults\nconst user   = body.user_id || body.user || 'unknown';\nconst amount = parseFloat(body.amount) || 0;\nconst message = body.message || '';\n\n// ============================================================\n// INTENT DETECTION MATRIX (deterministic, case‑insensitive)\n// ============================================================\n// Each regex uses word boundaries (\\b) to avoid false partial matches.\n// \n// *** HOW TO ADD RUSSIAN / UZBEK KEYWORDS LATER ***\n// Simply insert the required Cyrillic/Latin alternatives inside the\n// parentheses of the relevant regex, separated by a pipe (|).\n//\n//   Example (Russian transfer keywords):\n//   /\\b(transfer|send|pay|p2p|перевод|отправить|платить)\\b/i\n//\n//   Example (Uzbek transfer keywords):\n//   /\\b(transfer|send|pay|p2p|o'tkazish|jo'natish|to'lash)\\b/i\n//\n//   Feel free to mix all languages in the same pattern.\n// ============================================================\n\nconst TRANSFER_REGEX      = /\\b(transfer|send|pay|p2p)\\b/i;\nconst ACCESS_REGEX        = /\\b(login|password|block|freeze|access)\\b/i;\nconst PAYMENT_ISSUE_REGEX = /\\b(failed|error|refund|missing)\\b/i;\n\nlet intent = 'general_inquiry';\n\n// Evaluate in strict order – first match wins\nif (TRANSFER_REGEX.test(message)) {\n  intent = 'transfer_request';\n} else if (ACCESS_REGEX.test(message)) {\n  intent = 'access_issue';\n} else if (PAYMENT_ISSUE_REGEX.test(message)) {\n  intent = 'payment_issue';\n}\n\n// ============================================================\n// 3. Output the canonical JSON for downstream nodes\n// ============================================================\nreturn {\n  json: {\n    user,\n    amount,\n    intent,\n    risk_level: \"PENDING\",   // will be enriched by the next node\n    status: \"PENDING\"        // will be updated later in the workflow\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -512,
+        -16
+      ],
+      "id": "70a54654-1303-4f0c-9065-4b1e422d4a22",
+      "name": "Phase 1.1 – Ingress & Deterministic Intent Detection"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "453f4455-2b49-4472-b950-3f40ac2b50a4",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -784,
+        -16
+      ],
+      "id": "287f7a3d-fe06-4faf-9a20-320a4d937ae6",
+      "name": "Phase 1",
+      "webhookId": "453f4455-2b49-4472-b950-3f40ac2b50a4"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Phase 1.2 – Risk Standardization & Triage Gate\n// Place after the intent detection node.  Expects canonical\n// payload: { user, amount, intent, risk_level, status }\n// ============================================================\n\n// 1. Retrieve the incoming item\nconst ticket = $input.first().json;\n\n// 2. Safely coerce amount to a number (0 if missing/unparseable)\nlet amount = parseFloat(ticket.amount);\nif (isNaN(amount)) amount = 0;\n\n// 3. Preserve intent and user (already normalised)\nconst intent = ticket.intent || 'general_inquiry';\nconst user   = ticket.user   || 'unknown';\n\n// 4. Apply Sovereign Limits in strict order – first match prevails\nlet risk_level = '';\nlet status     = '';\n\n// --- Rule 1: The Block (above 50M UZS) ---\nif (amount > 50000000) {\n  risk_level = 'BLOCKED';\n  status     = 'REJECTED_HARD_LIMIT';\n}\n// --- Rule 2: The Challenge (≥ 10M UZS) ---\nelse if (amount >= 10000000) {\n  risk_level = 'HIGH';\n  status     = 'PENDING_BIOMETRIC';\n}\n// --- Rule 3: Security Intent (access_issue) ---\nelse if (intent === 'access_issue') {\n  risk_level = 'HIGH';\n  status     = 'PENDING_HUMAN_REVIEW';\n}\n// --- Rule 4: Failed Payment Issue ---\nelse if (intent === 'payment_issue') {\n  risk_level = 'MED';\n  status     = 'PENDING_AUTO_RESOLUTION';\n}\n// --- Default: Low risk, auto-execution ---\nelse {\n  risk_level = 'LOW';\n  status     = 'PENDING_AUTO_EXECUTION';\n}\n\n// 5. Determine routing tag for visual Switch node in n8n\n//    This enables clean branching in Phase 2.\nlet routing_tag = '';\n\nswitch (risk_level) {\n  case 'BLOCKED':\n    routing_tag = 'ROUTE_TO_DEADLETTER';\n    break;\n  case 'HIGH':\n    routing_tag = 'ROUTE_TO_HITL';   // Human in the Loop\n    break;\n  case 'MED':\n    routing_tag = 'ROUTE_TO_CORE';   // Automated resolution with logging\n    break;\n  case 'LOW':\n    routing_tag = 'ROUTE_TO_CORE';   // Straight-through processing\n    break;\n  default:\n    routing_tag = 'ROUTE_TO_DEADLETTER'; // safety net\n}\n\n// 6. Enriched output for downstream nodes\nreturn {\n  json: {\n    user,\n    amount,\n    intent,\n    risk_level,\n    status,\n    routing_tag\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        -16
+      ],
+      "id": "7426c371-4213-4eeb-bfd2-5856a4ee4eb2",
+      "name": "Phase 1.2 – Risk Standardization & Triage Gate"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Phase 2.1 – Core Banking Execution & Simulation Layer\n// This node acts as the final ledger, safely simulating banking\n// actions based on intent and risk level.\n// ============================================================\n\nconst originalTicket = $input.first().json;\n\ntry {\n  // ----------------------------------------------------------\n  // 1. Extract & normalise the incoming ticket fields\n  // ----------------------------------------------------------\n  const user        = originalTicket.user        || 'unknown';\n  const intent      = originalTicket.intent      || 'general_inquiry';\n  const risk_level  = originalTicket.risk_level  || 'LOW';\n  const routing_tag = originalTicket.routing_tag || 'ROUTE_TO_DEADLETTER';\n  \n  // Amount is critical – ensure it's a valid number\n  let amount = parseFloat(originalTicket.amount);\n  if (isNaN(amount)) amount = 0;\n\n  // We will overwrite the status field\n  let status = originalTicket.status || 'PENDING';\n\n  // ----------------------------------------------------------\n  // 2. Execution Matrix – deterministic mock core responses\n  // ----------------------------------------------------------\n  let core_response = {};\n\n  // --- Scenario A: Happy Path Transfer (low‑risk transfer intent) ---\n  if (intent === 'transfer_request' && risk_level === 'LOW') {\n    status = 'RESOLVED_AUTO';\n    // Generate a unique transaction id (8 hex chars)\n    const tx_id = 'TXN-' + Math.random().toString(16).substring(2, 10);\n    core_response = {\n      action:         'TRANSFER_EXECUTED',\n      tx_id,          // the mock ledger entry id\n      ledger_status:  'CLEARED',           // funds have moved\n      timestamp:      new Date().toISOString()\n    };\n  }\n  // --- Scenario B: Auto‑Refund for medium‑risk payment issues ---\n  else if (intent === 'payment_issue' && risk_level === 'MED') {\n    status = 'RESOLVED_AUTO_REFUND';\n    core_response = {\n      action:          'REFUND_ISSUED',\n      amount_refunded: amount,             // full amount returned\n      original_tx_id:  'UNKNOWN',          // no link to original (simulated)\n      timestamp:       new Date().toISOString()\n    };\n  }\n  // --- Scenario C: High‑risk tickets held for human approval ---\n  else if (risk_level === 'HIGH') {\n    status = 'LOCKED_AWAITING_APPROVAL';\n    core_response = {\n      action:      'HELD_IN_ESCROW',\n      hold_reason: 'RISK_THRESHOLD_EXCEEDED',\n      timestamp:   new Date().toISOString()\n    };\n  }\n  // --- Scenario D: Fallback – all other combinations ---\n  else {\n    status = 'LOGGED_NO_ACTION';\n    core_response = {\n      action:    'NO_OP',\n      timestamp: new Date().toISOString()\n    };\n  }\n\n  // ----------------------------------------------------------\n  // 3. Return the enriched, un‑mutated ticket\n  //    Original fields are preserved; only status is updated\n  //    and the core_response is appended.\n  // ----------------------------------------------------------\n  return {\n    json: {\n      user,\n      amount,\n      intent,\n      risk_level,\n      status,          // updated status reflecting the action taken\n      routing_tag,     // preserved for potential post‑execution routing\n      core_response     // cryptographically structured ledger entry\n    }\n  };\n\n} catch (error) {\n  // ----------------------------------------------------------\n  // 4. Emergency fallback – core system fault\n  //    The original ticket is returned intact, but flagged\n  //    with a fault signature so operations can recover.\n  // ----------------------------------------------------------\n  return {\n    json: {\n      ...originalTicket,                        // carry forward all original data\n      amount: parseFloat(originalTicket.amount) || 0,\n      status: 'CORE_SYSTEM_FAULT',\n      risk_level: originalTicket.risk_level || 'UNKNOWN',\n      core_response: {\n        action:        'CORE_SYSTEM_FAULT',\n        error_message: error.message || 'Unhandled exception in core simulation',\n        timestamp:     new Date().toISOString()\n      }\n    }\n  };\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        464,
+        -304
+      ],
+      "id": "fb546621-1a7c-44b2-9bbd-d95af0ed95ef",
+      "name": "Phase 2.1 – Core Banking Execution & Simulation Layer"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.routing_tag }}",
+                    "rightValue": "ROUTE_TO_CORE",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "d2704b63-ed92-48ec-9d1f-386ce9869b0f"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "To Fake Core API"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.routing_tag }}",
+                    "rightValue": "ROUTE_TO_HITL",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "To Telegram (HITL)"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.routing_tag }}",
+                    "rightValue": "ROUTE_TO_DEADLETTER",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "f9e8d7c6-b5a4-3210-fedc-ba0987654321"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "To Deadletter / Blocked"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "none"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        48,
+        -32
+      ],
+      "id": "efa05e69-4c75-47db-90a6-128d0b8f5af8",
+      "name": "Switch: Risk Routing"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Phase 2.2 – Telegram Payload Formatter (High‑Risk Alerts)\n// Formats the HELD ticket into a Telegram‑ready payload with\n// inline action buttons for human authorisation.\n// ============================================================\n\nconst ticket     = $input.first().json;\nconst rawUser    = ticket.user       || 'unknown';\nconst rawIntent  = ticket.intent     || 'general_inquiry';\n\n// Safely parse & format amount with thousand separators (UZS)\nconst rawAmount  = parseFloat(ticket.amount);\nconst amount     = isNaN(rawAmount) ? 0 : rawAmount;\nconst rawFormattedAmount = amount.toString().replace(/\\B(?=(\\d{3})+(?!\\d))/g, ',') + ' UZS';\n\n// ------------------------------------------------------------\n// 1. ESCAPE HELPER FOR TELEGRAM MARKDOWNV2\n// Telegram MDv2 strictly requires these characters to be escaped:\n// _ * [ ] ( ) ~ ` > # + - = | { } . !\n// ------------------------------------------------------------\nfunction escapeMD(text) {\n  return String(text).replace(/[_*[\\]()~`>#+\\-=|{}.!]/g, '\\\\$&');\n}\n\nconst user = escapeMD(rawUser);\nconst intent = escapeMD(rawIntent);\nconst formattedAmount = escapeMD(rawFormattedAmount);\n\n// ------------------------------------------------------------\n// 2. Build the notification text (MarkdownV2)\n// ------------------------------------------------------------\nconst telegram_text =\n  `🚨 *HIGH RISK TRANSACTION HELD* 🚨\\n\\n` +\n  `*User:* ID\\\\-${user}\\n` +\n  `*Intent:* ${intent}\\n` +\n  `*Amount:* ${formattedAmount}\\n` +\n  `*Action Required:* Awaiting human authorisation\\\\.`;\n\n// ------------------------------------------------------------\n// 3. Construct the inline keyboard with callback data\n// ------------------------------------------------------------\nconst telegram_markup = {\n  inline_keyboard: [\n    [\n      { text: \"✅ APPROVE\", callback_data: `approve_${rawUser}` },\n      { text: \"❌ DENY\",   callback_data: `deny_${rawUser}`   }\n    ]\n  ]\n};\n\nreturn {\n  json: {\n    telegram_text,\n    telegram_markup\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        368,
+        -16
+      ],
+      "id": "506ad5c9-4773-4ffd-a5d1-2db582306207",
+      "name": "Phase 2.2 – Telegram Payload Formatter"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ticket = $input.first().json;\nticket.status = \"TERMINATED_AT_FIREWALL\";\nreturn { json: ticket };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        464,
+        272
+      ],
+      "id": "b6aaa636-bf14-49ca-969c-a604edb56b7d",
+      "name": "🛑 FIREWALL: TICKET BLOCKED"
+    },
+    {
+      "parameters": {
+        "chatId": "={{$vars.Telegram_chat_ID}}",
+        "text": "={{ $json.telegram_text }}",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "✅ Approve",
+                    "additionalFields": {
+                      "callback_data": "={{ $json.telegram_markup.inline_keyboard[0][0].callback_data }}"
+                    }
+                  },
+                  {
+                    "text": " ❌ DENY",
+                    "additionalFields": {
+                      "callback_data": "={{ $json.telegram_markup.inline_keyboard[0][1].callback_data }}"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {
+          "parse_mode": "MarkdownV2"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        624,
+        -16
+      ],
+      "id": "b737762b-1802-4417-8bbe-53cb83ba1daa",
+      "name": "Telegram: Send HITL Alert",
+      "webhookId": "bba2e28e-a1db-4098-a965-8b6a4b9a89c0",
+      "credentials": {
+        "telegramApi": {
+          "id": "cvMLNgGEw4hRmno0",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Sprint 3.1 & 4.1 – Unit Economics & Audit Logger\n// Formats the completed ticket for the Audit Trail Google Sheet.\n// ============================================================\n\nconst ticket       = $input.first().json;\nconst user_id      = ticket.user                || 'unknown';\nconst intent       = ticket.intent              || 'general_inquiry';\nconst risk_level   = ticket.risk_level          || 'LOW';\nconst final_status = ticket.status              || 'UNKNOWN';\nconst amount       = parseFloat(ticket.amount) || 0;\n\n// ------------------------------------------------------------\n// 1. Unit Economics Constants\n// ------------------------------------------------------------\nconst MANUAL_COST_UZS = 15000;   // Cost of a human agent\nconst AI_COST_UZS     = 45;      // Cost of REVENANT processing\n\nlet processing_cost_uzs;\nlet money_saved_uzs;\n\nconst statusLower = final_status.toLowerCase();\n\n// ------------------------------------------------------------\n// 2. Determine processing cost & savings based on final status\n// ------------------------------------------------------------\nif (statusLower.includes('auto') || statusLower.includes('firewall')) {\n  // Automated resolution – no human touch\n  processing_cost_uzs = AI_COST_UZS;\n  money_saved_uzs     = MANUAL_COST_UZS - AI_COST_UZS;\n} else if (statusLower.includes('authorized') || statusLower.includes('denied')) {\n  // Human-in-the-loop – full manual cost applies\n  processing_cost_uzs = MANUAL_COST_UZS;\n  money_saved_uzs     = 0;\n} else {\n  // Fallback (other statuses like LOGGED, CORE_SYSTEM_FAULT, etc.)\n  processing_cost_uzs = AI_COST_UZS;  // assume automated handling by default\n  money_saved_uzs     = MANUAL_COST_UZS - AI_COST_UZS;\n}\n\n// ------------------------------------------------------------\n// 3. Compliance Tagging (Sprint 4.2)\n// ------------------------------------------------------------\nconst audit_tags = [];\n\nif (amount > 50000000) {\n  audit_tags.push('AML_HARD_LIMIT_TRIGGERED');\n}\n\nif (risk_level === 'LOW') {\n  audit_tags.push('KYC_VERIFIED', 'AUTO_CLEARED');\n}\n\n// Join tags into a single string for Google Sheets\nconst audit_tags_str = audit_tags.join(', ');\n\n// ------------------------------------------------------------\n// 4. Generate a fake ledger hash (audit trail reference)\n// ------------------------------------------------------------\nconst randomHex = Array.from({ length: 16 }, () =>\n  Math.floor(Math.random() * 16).toString(16)\n).join('');\nconst ledger_hash = `SHA256-${randomHex}`;\n\n// ------------------------------------------------------------\n// 5. Final flat JSON for Google Sheets append row\n// ------------------------------------------------------------\n// ** CONNECT TO GOOGLE SHEETS NODE **\n// After this node, add a \"Google Sheets\" node -> \"Append Row\".\n// Map the following fields directly:\n//   timestamp           -> {{ $json.timestamp }}\n//   user_id             -> {{ $json.user_id }}\n//   intent              -> {{ $json.intent }}\n//   risk_level          -> {{ $json.risk_level }}\n//   final_status        -> {{ $json.final_status }}\n//   processing_cost_uzs -> {{ $json.processing_cost_uzs }}\n//   money_saved_uzs     -> {{ $json.money_saved_uzs }}\n//   audit_tags          -> {{ $json.audit_tags }}\n//   ledger_hash         -> {{ $json.ledger_hash }}\n// Make sure the sheet's first row has the exact same headers.\n// ------------------------------------------------------------\nreturn {\n  json: {\n    timestamp: new Date().toISOString(),\n    user_id,\n    intent,\n    risk_level,\n    final_status,\n    processing_cost_uzs,\n    money_saved_uzs,\n    audit_tags: audit_tags_str,\n    ledger_hash\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        0
+      ],
+      "id": "5fb373d9-8cc3-41af-ba19-e2286af6bda6",
+      "name": "Ledger Formatter"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "19m4pkGhUvnVWSqPGq8dagmt7ZJTZI-bBdJ5Vsi35Vlo",
+          "mode": "list",
+          "cachedResultName": "REVENANT Audit Ledger",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/19m4pkGhUvnVWSqPGq8dagmt7ZJTZI-bBdJ5Vsi35Vlo/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Лист1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/19m4pkGhUvnVWSqPGq8dagmt7ZJTZI-bBdJ5Vsi35Vlo/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "user_id": "={{ $json.user_id }}",
+            "intent": "={{ $json.intent }}",
+            "risk_level": "={{ $json.risk_level }}",
+            "final_status": "={{ $json.final_status }}",
+            "processing_cost_uzs": "={{ $json.processing_cost_uzs }}",
+            "money_saved_uzs": "={{ $json.money_saved_uzs }}",
+            "audit_tags": "={{ $json.audit_tags }}",
+            "ledger_hash": "={{ $json.ledger_hash }}",
+            "timestamp": "={{ $json.timestamp }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "user_id",
+              "displayName": "user_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "intent",
+              "displayName": "intent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "risk_level",
+              "displayName": "risk_level",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "final_status",
+              "displayName": "final_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "processing_cost_uzs",
+              "displayName": "processing_cost_uzs",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "money_saved_uzs",
+              "displayName": "money_saved_uzs",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "audit_tags",
+              "displayName": "audit_tags",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ledger_hash",
+              "displayName": "ledger_hash",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1264,
+        0
+      ],
+      "id": "dd9264e0-9a04-4e91-b177-ca29e94a1643",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "AY5bvvd3R4Tzz6kV",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Phase 1": {
+      "main": [
+        [
+          {
+            "node": "Phase 1.1 – Ingress & Deterministic Intent Detection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Phase 1.1 – Ingress & Deterministic Intent Detection": {
+      "main": [
+        [
+          {
+            "node": "Phase 1.2 – Risk Standardization & Triage Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Phase 1.2 – Risk Standardization & Triage Gate": {
+      "main": [
+        [
+          {
+            "node": "Switch: Risk Routing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch: Risk Routing": {
+      "main": [
+        [
+          {
+            "node": "Phase 2.1 – Core Banking Execution & Simulation Layer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Phase 2.2 – Telegram Payload Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "🛑 FIREWALL: TICKET BLOCKED",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Phase 2.2 – Telegram Payload Formatter": {
+      "main": [
+        [
+          {
+            "node": "Telegram: Send HITL Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Phase 2.1 – Core Banking Execution & Simulation Layer": {
+      "main": [
+        [
+          {
+            "node": "Ledger Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🛑 FIREWALL: TICKET BLOCKED": {
+      "main": [
+        [
+          {
+            "node": "Ledger Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ledger Formatter": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "4d063f86-5bab-41be-8763-248de0fbf5e4",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "78c6a364e8ea556c4441f54ffc3b18dfc6557a3412b75e7187eae4ac0d914297"
+  },
+  "id": "LAjxy6BEYEYjUMn2",
+  "tags": []
+}

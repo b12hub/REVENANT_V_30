@@ -1,0 +1,131 @@
+{
+  "name": "REVENANT_PHASE_5: Live Data API",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "audit-logs",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "837d7cf3-52ee-45de-8bea-06c21d9fc346",
+      "name": "Webhook",
+      "webhookId": "fe22041c-dede-4577-85c2-4898836f816a"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "19m4pkGhUvnVWSqPGq8dagmt7ZJTZI-bBdJ5Vsi35Vlo",
+          "mode": "list",
+          "cachedResultName": "REVENANT Audit Ledger",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/19m4pkGhUvnVWSqPGq8dagmt7ZJTZI-bBdJ5Vsi35Vlo/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Лист1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/19m4pkGhUvnVWSqPGq8dagmt7ZJTZI-bBdJ5Vsi35Vlo/edit#gid=0"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        208,
+        0
+      ],
+      "id": "4723fbaa-1b11-42e2-a75b-ee9ee0b696dd",
+      "name": "Get row(s) in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "AY5bvvd3R4Tzz6kV",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all().map(item => item.json);\n// Get the last 6 rows and reverse them so the newest is at the top\nconst latest = rows.slice(-6).reverse(); \nreturn latest.map(row => ({ json: row }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        0
+      ],
+      "id": "6062c442-bb16-4d84-b4e5-2043a474a5fe",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        608,
+        0
+      ],
+      "id": "02efc11b-730f-4319-8f10-fb215fb6527d",
+      "name": "Respond to Webhook"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "02009dc2-7172-45bd-8a85-4c2f8d65eccc",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "78c6a364e8ea556c4441f54ffc3b18dfc6557a3412b75e7187eae4ac0d914297"
+  },
+  "id": "fkehC12d3sDgEcm2",
+  "tags": []
+}

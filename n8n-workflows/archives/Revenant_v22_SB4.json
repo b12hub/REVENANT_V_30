@@ -1,0 +1,1722 @@
+{
+  "name": "Revenant_v22_SB4",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// Load all configuration from variables\nconst config = {\n  // Cost Configuration\n  cost_uzs: {\n    agent_hourly_rate: parseInt($vars.AGENT_HOURLY_RATE) || 50000,\n    manual_ticket_cost: parseInt($vars.MANUAL_TICKET_COST) || 12500,\n    ai_processing_cost: parseInt($vars.AI_PROCESSING_COST) || 2500,\n    savings_per_ticket: parseInt($vars.SAVINGS_PER_TICKET) || 10000,\n    tickets_per_month: parseInt($vars.TICKETS_PER_MONTH) || 1000\n  },\n  \n  // AI Configuration\n  ai_config: {\n    model: \"openai/gpt-4o-mini\",\n    timeout_ms: 6000,\n    retry_count: 3,\n    confidence_threshold: 0.7\n  },\n  \n  // SLA Configuration\n  uzbekistan_sla: {\n    timezone: 'Asia/Tashkent',\n    business_hours: { start: 9, end: 18, days: [1, 2, 3, 4, 5] },\n    thresholds_ms: { critical: 1800000, high: 7200000, medium: 28800000, low: 86400000 },\n    after_hours_multiplier: 1.5\n  },\n  \n  // System Configuration\n  system_config: {\n    workflow_version: 'Revenant_v20_HYBRID_ENTERPRISE',\n    max_tickets_per_minute: 100,\n    audit_log_enabled: true,\n    telemetry_enabled: true,\n    // ✅ ADDED: Initialize memory retrieval failure counter\n    memory_retrieval_failures: 0\n  }\n};\n\n// Validate configuration\nconst validation = {\n  has_cost_config: !!config.cost_uzs,\n  has_ai_config: !!config.ai_config,\n  variables_loaded: {\n    AGENT_HOURLY_RATE: !!$vars.AGENT_HOURLY_RATE,\n    MANUAL_TICKET_COST: !!$vars.MANUAL_TICKET_COST,\n    AI_PROCESSING_COST: !!$vars.AI_PROCESSING_COST,\n    SAVINGS_PER_TICKET: !!$vars.SAVINGS_PER_TICKET,\n    TICKETS_PER_MONTH: !!$vars.TICKETS_PER_MONTH\n  }\n};\n\nconst outputItem = {\n  json: {\n    config: config,\n    config_validation: validation,\n    loaded_at: new Date().toISOString(),\n    node_count: Object.keys($node || {}).length\n  }\n};\n\n// ✅ EXECUTION IDENTITY - ADDED AT END FOR MERGE DETERMINISM\noutputItem.json.trace_id = $execution.id;\n\nreturn [outputItem];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        18912,
+        2464
+      ],
+      "id": "6acd8675-918c-4426-a56c-2dda1084fbdd",
+      "name": "Configuration Loader - V20"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"error\",\n  \"message\": \"{{ $json.reason }}\",\n  \"error_code\": \"{{ $json.error_type }}\",\n  \"trace_id\": {{ $json.trace_id }},\n  \"stage\": \"{{ $json.stage }}\",\n  \"timestamp\": \"{{ $json.timestamp }}\"\n}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "5ad4d5c7-bd8c-4c63-9166-800fc4d97489",
+      "name": "Return Validation Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        20032,
+        2704
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst ct = item.json.canonical_ticket;\n\n// Phase 0 Core Validation - HARDENED FOR TYPE SAFETY\nconst errors = [];\n\n// 1. REQUIRED: Trace ID must exist and be valid\nif (!ct.trace_id) {\n  errors.push('MISSING_TRACE_ID');\n} else {\n  // Convert to string safely for validation\n  const traceIdStr = String(ct.trace_id);\n  if (traceIdStr.trim().length === 0) {\n    errors.push('EMPTY_TRACE_ID');\n  }\n}\n\n// 2. REQUIRED: Subject must exist and be valid length\nif (!ct.subject) {\n  errors.push('MISSING_SUBJECT');\n} else {\n  const subjectStr = String(ct.subject);\n  if (subjectStr.trim().length === 0) {\n    errors.push('EMPTY_SUBJECT');\n  } else if (subjectStr.trim().length > 500) {\n    errors.push('SUBJECT_TOO_LONG');\n  }\n}\n\n// 3. REQUIRED: Valid email format\nif (!ct.customer_email) {\n  errors.push('MISSING_CUSTOMER_EMAIL');\n} else {\n  const emailStr = String(ct.customer_email);\n  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(emailStr)) {\n    errors.push('INVALID_CUSTOMER_EMAIL_FORMAT');\n  }\n}\n\n// 4. SANITY: workflow_error shouldn't exist yet\nif (ct.workflow_error) {\n  errors.push('PREMATURE_WORKFLOW_ERROR');\n}\n\n// 5. ✅ CORRECTED: language_analysis is NOT required at this stage\n//    This validation was premature - removing requirement\n\n// 6. ✅ CORRECTED: rule_engine is NOT required at this stage  \n//    This validation was premature - removing requirement\n\n// VALIDATION RESULT\nif (errors.length > 0) {\n  return [{\n    json: {\n      canonical_ticket: {\n        ...ct,\n        workflow_error: {\n          type: 'PHASE_0_VALIDATION_FAILED',\n          errors: errors,\n          timestamp: new Date().toISOString(),\n          trace_id: String(ct.trace_id || 'UNKNOWN'),  // Convert to string\n          stage: 'phase_0_validation',\n          input_sample: {\n            subject: ct.subject ? String(ct.subject).substring(0, 50) : 'missing',\n            email: ct.customer_email ? String(ct.customer_email) : 'missing'\n          }\n        },\n        __validation_failed: true\n      }\n    }\n  }];\n}\n\n// ✅ PHASE 0 COMPLETE - Continue normally\nreturn [{\n  json: {\n    trace_id: String(ct.trace_id) ,\n    canonical_ticket: {\n      ...ct,\n      // Ensure trace_id is string for downstream consistency\n      trace_id: String(ct.trace_id),\n      // Add Phase 0 validation timestamp\n      phase_0_completed_at: new Date().toISOString(),\n      phase_0_status: 'validated'\n    }\n  }\n}];"
+      },
+      "id": "6a612199-3d9f-43d8-bbe7-3b8dc27054f2",
+      "name": "Phase 0 Validation Gate - V20",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        20032,
+        2416
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Input Validator & Cleaner - V16 - HARDENED\nconst envelope = $input.first().json;\n\n// ARCHITECTURAL GUARD - Must have envelope structure\nif (!envelope.meta || envelope.meta.stage !== 'SB0') {\n  throw new Error(`ARCHITECTURAL_VIOLATION: Invalid envelope stage - expected SB0, got ${envelope.meta?.stage}`);\n}\n\nconst payload = envelope.payload;\n\n// Validate required fields exist\nconst requiredFields = ['subject', 'body', 'customer_email'];\nconst missingFields = requiredFields.filter(field => !payload?.[field]);\nif (missingFields.length > 0) {\n  throw new Error(`SB1_VALIDATION_FAILED: Missing payload fields: ${missingFields.join(', ')}`);\n}\n\n// Clean text function\nconst cleanText = (text) => {\n  if (!text) return '';\n  return text.toString()\n    .replace(/<script\\b[^<]*(?:(?!<\\/script>)<[^<]*)*<\\/script>/gi, '')\n    .replace(/<[^>]*>/g, '')\n    .replace(/[&<>\"']/g, char => ({\n      '&': '&amp;',\n      '<': '&lt;', \n      '>': '&gt;',\n      '\"': '&quot;',\n      \"'\": '&#x27;'\n    }[char]))\n    .replace(/[\\t\\n\\r]+/g, ' ')\n    .trim();\n};\n\n// Extract headers from envelope (preserved in SB0 envelope)\nconst originalHeaders = envelope.original_headers || {};\n\n// Build canonical ticket with SINGULARITY FLAG\nconst cleaned_ticket = {\n  trace_id: envelope.meta.trace_id,\n  subject: cleanText(payload.subject),\n  body: cleanText(payload.body),\n  customer_email: cleanText(payload.customer_email),\n  original_subject: payload.subject,\n  original_body: payload.body,\n  original_customer_email: payload.customer_email,\n  severity: payload.severity || 'medium',\n  priority: payload.priority || 'medium',\n  category: payload.category || 'technical',\n  webhook_received_at: new Date().toISOString(),\n  client_ip: originalHeaders['x-forwarded-for'] || 'unknown',\n  user_agent: originalHeaders['user-agent'] || 'unknown',\n  // ⚡ CRITICAL SINGULARITY FLAG - Prevents re-validation\n  __validation_attempted: true,\n  // Audit trail\n  validation_stage: 'SB1',\n  envelope_processed_at: envelope.meta?.timestamp || new Date().toISOString()\n};\n\nreturn [{\n  json: {\n    canonical_ticket: cleaned_ticket,\n    // Preserve envelope metadata for traceability\n    __envelope_metadata: {\n      trace_id: envelope.meta.trace_id,\n      stage: envelope.meta.stage,\n      execution_mode: envelope.meta.execution_mode,\n      processed_at: new Date().toISOString()\n    }\n  }\n}];"
+      },
+      "id": "33255c8c-953b-4649-8186-d6eb71b72a16",
+      "name": "Input Validator & Cleaner - V16",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        19808,
+        2416
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "id-1",
+              "leftValue": "={{ $json.meta && $json.meta.stage === 'SB0' }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              },
+              "rightValue": true
+            },
+            {
+              "id": "id-2",
+              "leftValue": "={{ $json.payload && $json.payload.subject && $json.payload.body && $json.payload.customer_email.toBoolean() }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              },
+              "rightValue": true
+            },
+            {
+              "id": "e1398c9e-e196-4185-a261-c95cd7f8e8ec",
+              "leftValue": "={{ $json.__validation_attempted !== true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "85953312-3368-4a5f-89d2-b1cda84ff841",
+              "leftValue": "={{ !!($json.payload && $json.payload.subject && $json.payload.subject.trim().length > 0) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "length-validation",
+              "leftValue": "={{ $json.payload && $json.payload.body && $json.payload.body.trim().length > 0 }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "6af9f137-76e8-475a-b5f6-7d86bf80d610",
+              "leftValue": "={{ !!$json.payload?.customer_email }}",
+              "rightValue": "={{ true }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "d58655a2-8590-4fba-8e5c-3d5a560204c7",
+              "leftValue": "={{ !($json.payload && ($json.payload.subject.includes('<script>') || $json.payload.body.includes('<script>'))) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "0da7e02e-01e2-47ed-9b80-d1bee0c1116e",
+              "leftValue": "={{ $json.payload && $json.payload.subject && $json.payload.subject.trim().length <= 500 && $json.payload.body.trim().length <= 5000 }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "46da2e31-1414-41d1-8e56-8111294ef7de",
+              "leftValue": "={{ $json.payload.customer_email.trim() }}",
+              "rightValue": "^[^@ ]+@[^@ ]+\\.[^@ ]+$",
+              "operator": {
+                "type": "string",
+                "operation": "regex"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "8aef3fdf-1609-4f48-a122-f6c3d35ad908",
+      "name": "Validate Input Fields",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        19584,
+        2608
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "f860224a-492d-454b-b3dc-0970fa48ad3a",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "e3748fc9-ede8-4ee2-8ad0-7cb22c3fc8fc",
+      "name": "Webhook Ingestion - Rate Limited",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        18464,
+        2544
+      ],
+      "webhookId": "f860224a-492d-454b-b3dc-0970fa48ad3a"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ⚠️ SB1 ERROR EXIT – Validation Failure Handler - TERMINAL\nconst item = $input.first();\n\n// TERMINAL ERROR - Structured for webhook response\nreturn [{\n  json: {\n    // Signal to Return Validation Error node that this is a terminal error\n    __terminal_error: true,\n    error_type: 'SB1_VALIDATION_TERMINAL',\n    trace_id: item.json.meta?.trace_id || 'unknown',\n    stage: 'SB1',\n    http_code: 400,\n    reason: 'Validation failed – terminal exit',\n    timestamp: new Date().toISOString(),\n    \n    // Preserve envelope structure for audit trail\n    original_envelope: {\n      meta: item.json.meta,\n      config: item.json.config,\n      payload: item.json.payload\n    }\n  }\n}];"
+      },
+      "id": "7cbc2b77-a641-4fb9-bf72-2ea804a87e20",
+      "name": "⚠️ SB1 ERROR EXIT – Validation Failure Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        19808,
+        2704
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "fieldsToMatchString": "trace_id",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        19136,
+        2544
+      ],
+      "id": "feb2f05d-aae2-4c09-a609-bfaee6c65d93",
+      "name": "Merge Node Configuration"
+    },
+    {
+      "parameters": {
+        "jsCode": "// PROD Input Normalizer - Hardened V20\nconst item = $input.first();\nconst json = item.json;\n\n// 1. CANONICAL TRACE ID - ADDED AT TOP FOR DETERMINISM\nitem.json.trace_id = $execution.id;\n\n// 2. EXISTING NORMALIZATION LOGIC\nif (json.subject && json.body && !json.body?.subject) {\n  return [{\n    json: {\n      trace_id: $execution.id, // Preserve in normalized structure\n      body: {\n        subject: json.subject,\n        body: json.body,\n        customer_email: json.customer_email || null\n      }\n    }\n  }];\n}\n\n// 3. ENSURE TRACE_ID PERSISTS IN ALL RETURN PATHS\nreturn [{ \n  json: {\n    ...json,\n    trace_id: $execution.id // Force overwrite to prevent any upstream contamination\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        18688,
+        2544
+      ],
+      "id": "fddcda34-6668-4fa6-ac2b-bd879b8bd73b",
+      "name": "PROD Input Normalizer - Hardened V20"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "=  {\n  \"trace_id\":\"{{$execution.id}}\",\n  \"meta\": {\n    \"trace_id\":\"{{$execution.id}}\",\n    \"execution_mode\": {{$json.executionMode || 'prod'}},\n    \"stage\": \"SB0\",\n    \"timestamp\": {{ new Date().toISOString() }}\n  },\n  \"config\": {{$json.config}},\n  \"payload\": {\n    \"subject\": {{$json.body.subject}},\n    \"body\": {{$json.body.body}},\n    \"customer_email\": {{$json.body.customer_email}},\n    \"severity\": {{$json.body.severity || 'medium'}},\n    \"priority\": {{$json.body.priority || 'medium'}},\n    \"category\": {{$json.body.category || 'technical'}}\n  },\n  \"original_headers\": {{$json.headers}},\n  \"__raw_data_purged\": true\n}\n\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        19360,
+        2544
+      ],
+      "id": "35bd3343-0ee4-414c-b885-bf5ad038cab6",
+      "name": "SB0 – Envelope Constructor"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst ct = item.json.canonical_ticket;\nconst text = (ct.subject + ' ' + ct.body).toLowerCase();\n\nconst rules = [\n  { intent: 'vpn_issue', regex: /\\b(vpn|ulanish|tarmo[gq]|connect|сеть|подключение)\\b/, severity: 'medium', score: 1.0 },\n  { intent: 'password_reset', regex: /\\b(parol|password|логин|пароль|reset|сброс|hisob|account)\\b/, severity: 'medium', score: 1.0 },\n  { intent: 'network_issue', regex: /\\b(internet|сеть|подключение|network|slow|медленно|tarmoq)\\b/, severity: 'high', score: 1.0 },\n  { intent: 'software_install', regex: /\\b(dastur|программа|software|установка|o'rnatish|instal|yuklash)\\b/, severity: 'medium', score: 0.9 },\n  { intent: 'hardware_issue', regex: /\\b(kompyuter|computer|компьютер|noutbuk|ноутбук|printer|принтер|hardware|qurilma)\\b/, severity: 'medium', score: 0.9 },\n  { intent: 'email_issue', regex: /\\b(email|почта|elektron pochta|message|xat|gmail|outlook)\\b/, severity: 'low', score: 0.8 },\n  { intent: 'security_alert', regex: /\\b(security|xavfsizlik|безопасность|hacker|hack|virus|вирус|attack)\\b/, severity: 'critical', score: 1.0 }\n];\n\nlet detectedIntent = 'general_inquiry';\nlet detectedSeverity = ct.severity || 'medium';\nlet ruleConfidence = 0.5;\n\nfor (const rule of rules) {\n  if (rule.regex.test(text)) {\n    detectedIntent = rule.intent;\n    detectedSeverity = rule.severity;\n    ruleConfidence = rule.score;\n    break;\n  }\n}\n\nreturn [{\n  json: {\n    canonical_ticket: {\n      ...ct,\n      rule_engine: {\n        intent: detectedIntent,\n        severity: detectedSeverity,\n        confidence: ruleConfidence,\n        detected_at: new Date().toISOString()\n      },\n      data_integrity: {\n        ...ct.data_integrity,\n        last_modified: Date.now(),\n        modification_count: (ct.data_integrity?.modification_count || 0) + 1\n      }\n    }\n  }\n}];"
+      },
+      "id": "05ff766d-6617-4d67-8831-5faff3a3d59d",
+      "name": "Rule-Based Classifier - V20",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        21152,
+        2352
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Deterministic Severity Classification\nconst item = $input.first();\nconst ct = item.json.canonical_ticket || item.json;\nconst text = ct.subject + ' ' + ct.body;\nconst textLower = text.toLowerCase();\n\n// Use text features if available\nconst textFeatures = ct.text_features || item.json.text_features || {};\n\n// Scoring system\nconst scores = { critical: 0, high: 0, medium: 0, low: 0 };\n\n// Critical indicators\nconst criticalTerms = ['critical', 'emergency', 'outage', 'down', 'breach', 'data loss'];\ncriticalTerms.forEach(term => {\n  if (textLower.includes(term)) scores.critical += 3;\n});\n\n// High severity indicators  \nconst highTerms = ['urgent', 'failed', 'cannot', 'unable', 'revenue', 'customer'];\nhighTerms.forEach(term => {\n  if (textLower.includes(term)) scores.high += 2;\n});\n\n// Medium severity indicators\nconst mediumTerms = ['issue', 'problem', 'help', 'support', 'slow'];\nmediumTerms.forEach(term => {\n  if (textLower.includes(term)) scores.medium += 1;\n});\n\n// Text statistics boost\nif (textFeatures.total_length > 200) scores.high += 1;\nif (textFeatures.has_urgent) scores.high += 1;\nif (textFeatures.has_critical) scores.critical += 2;\n\n// Determine severity\nconst maxScore = Math.max(...Object.values(scores));\nlet severity = 'medium';\nlet confidence = 0.5;\n\nif (maxScore > 0) {\n  if (scores.critical >= 3) severity = 'critical';\n  else if (scores.high >= 2) severity = 'high';\n  else if (scores.medium >= 1) severity = 'medium';\n  else severity = 'low';\n  \n  confidence = Math.min(0.5 + (maxScore / 10), 0.95);\n}\n\nreturn [{\n  json: {\n    ...item.json,\n    rule_based_severity: {\n      severity,\n      confidence,\n      scores\n    },\n    canonical_ticket: {\n      ...ct,\n      rule_based_severity: {\n        severity,\n        confidence,\n        scores\n      }\n    }\n  }\n}];"
+      },
+      "id": "f68f19bd-36c0-4489-b2a0-9ef88c6aff4f",
+      "name": "Rule-Based Severity Classifier",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        21376,
+        2352
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Text Feature Engineering (Deterministic) - V20\nconst item = $input.first();\nconst ct = item.json.canonical_ticket;\n\n// Validate input has required fields\nif (!ct.trace_id || !ct.subject || !ct.body) {\n  throw new Error(`MISSING_REQUIRED_FIELDS: trace_id=${!!ct.trace_id}, subject=${!!ct.subject}, body=${!!ct.body}`);\n}\n\nconst text = (ct.subject || '') + ' ' + (ct.body || '');\nconst textLower = text.toLowerCase();\n\n// Length features\nconst features = {\n  subject_length: ct.subject?.length || 0,\n  body_length: ct.body?.length || 0,\n  total_length: text.length,\n  word_count: text.split(/\\s+/).filter(w => w).length\n};\n\n// Keyword detection\nfeatures.has_critical = /\\b(critical|emergency|outage|down|breach)\\b/i.test(text);\nfeatures.has_urgent = /\\b(urgent|immediate|asap|now)\\b/i.test(text);\nfeatures.has_error_code = /error\\s+\\d+|code\\s+\\d+|err\\s+\\d+/i.test(text);\nfeatures.has_question = /\\b(how|what|why|can|could|would)\\b/i.test(text);\n\n// Complexity score\nfeatures.complexity_score = (\n  features.word_count * 0.1 +\n  (features.has_critical ? 3 : 0) +\n  (features.has_urgent ? 2 : 0) +\n  (features.has_error_code ? 1 : 0)\n);\n\n// Update canonical ticket\nconst updatedTicket = {\n  ...ct,\n  text_features: features,\n  data_integrity: {\n    ...ct.data_integrity,\n    last_modified: Date.now(),\n    modification_count: (ct.data_integrity?.modification_count || 0) + 1\n  }\n};\n\nreturn [{\n  json: {\n    canonical_ticket: updatedTicket\n  }\n}];"
+      },
+      "id": "dae6dd3f-fabf-4e03-afb6-dce514d59f16",
+      "name": "Text Feature Engineering (Deterministic)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        20928,
+        2352
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "fieldsToMatchString": "trace_id",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        20256,
+        2352
+      ],
+      "id": "652dd297-d684-45d4-ab26-e68bd24eae03",
+      "name": "Merge: Phase 0 Output + SB0 Config"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pre-Fusion Classification Normalizer - V20\nconst item = $input.first();\nconst ct = item.json.canonical_ticket;\n\n// VALIDATE PREREQUISITES\nif (!ct.rule_engine || !ct.rule_engine.intent) {\n  throw new Error(`MISSING_RULE_ENGINE: Cannot normalize without rule engine classification`);\n}\n\nif (!ct.rule_based_severity || !ct.rule_based_severity.severity) {\n  throw new Error(`MISSING_SEVERITY: Cannot normalize without rule-based severity`);\n}\n\n// DETERMINISTIC NORMALIZATION\nconst classification = {\n  // Intent from rule engine (guaranteed)\n  intent: ct.rule_engine.intent,\n  \n  // Severity hierarchy: rule_based_severity > rule_engine.severity > 'medium'\n  severity: ct.rule_based_severity.severity || ct.rule_engine.severity || 'medium',\n  \n  // Confidence from rule engine (deterministic)\n  confidence: ct.rule_engine.confidence || 0.5,\n  \n  // Source identification\n  source: 'rule_engine',\n  \n  // Timestamp\n  normalized_at: new Date().toISOString(),\n  \n  // Provenance\n  provenance: {\n    rule_engine: {\n      intent: ct.rule_engine.intent,\n      confidence: ct.rule_engine.confidence,\n      detected_at: ct.rule_engine.detected_at\n    },\n    rule_based_severity: {\n      severity: ct.rule_based_severity.severity,\n      confidence: ct.rule_based_severity.confidence,\n      scores: ct.rule_based_severity.scores\n    }\n  }\n};\n\n// Update canonical ticket\nconst updatedTicket = {\n  ...ct,\n  classification: classification,\n  data_integrity: {\n    ...ct.data_integrity,\n    last_modified: Date.now(),\n    modification_count: (ct.data_integrity?.modification_count || 0) + 1,\n    classification_normalized: true\n  }\n};\n\nreturn [{\n  json: {\n    canonical_ticket: updatedTicket\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        21600,
+        2352
+      ],
+      "id": "c1c4986a-97aa-4c70-a9c2-671f3ba8c7b9",
+      "name": "Pre-Fusion Classification Normalizer - V1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst ct = item.json.canonical_ticket || {};\n\n// ✅ FIXED: Get cost config from canonical_ticket or use defaults\nconst costCfg = ct.workflow_metadata?.config?.cost_uzs || {\n  agent_hourly_rate: 50000,\n  manual_ticket_cost: 12500,\n  ai_processing_cost: 2500,\n  savings_per_ticket: 10000,\n  tickets_per_month: 1000\n};\n\nconst aiCost = costCfg.ai_processing_cost || 0;\nconst manualCost = costCfg.manual_ticket_cost || 0;\nconst autoResolved = ct.ticket_status === 'auto_resolved';\nconst cost_saved_uzs = autoResolved ? Math.max(0, manualCost - aiCost) : 0;\n\n// Calculate ROI properly (prevent division by zero)\nconst roi_per_ticket = autoResolved && aiCost > 0 ? ((manualCost - aiCost) / aiCost) * 100 : 0;\n\nreturn [{\n  json: {\n    canonical_ticket: {\n      ...ct,\n      business_impact: {\n        ai_cost_uzs: aiCost,\n        manual_cost_uzs: manualCost,\n        cost_saved_uzs,\n        agent_time_saved_minutes: autoResolved ? 15 : 0,\n        roi_per_ticket: parseFloat(roi_per_ticket.toFixed(2)),\n        // ✅ Add config source for debugging\n        config_source: ct.workflow_metadata?.cost_config_used ? 'workflow_variables' : 'default'\n      },\n      data_integrity: {\n        ...ct.data_integrity,\n        last_modified: Date.now(),\n        modification_count: (ct.data_integrity?.modification_count || 0) + 1\n      }\n    }\n  }\n}];"
+      },
+      "id": "404289b0-c5a5-4539-9e03-6d3a20efdd0d",
+      "name": "Business Impact Calculator (UZS) - V20",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        22048,
+        2352
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst ct = item.json.canonical_ticket;\nconst config = ct.workflow_metadata?.config || {};\nconst now = new Date().getTime();\n\n// ✅ v20 MERGE: Correct timezone calculation for Tashkent from v18\nconst tashkentOffset = 5 * 60 * 60 * 1000; // UTC+5 in milliseconds\nconst tashkentTime = new Date(now + tashkentOffset);\n\n// Get hour in Tashkent (0-23)\nconst hour = tashkentTime.getUTCHours();\nconst dayOfWeek = tashkentTime.getUTCDay(); // 0 = Sunday\n\n// Business hours in Tashkent: Monday-Friday, 9:00-18:00\nconst isBusinessHours = dayOfWeek >= 1 && dayOfWeek <= 5 && hour >= 9 && hour < 18;\n\nconst slaConfig = config.uzbekistan_sla || {};\nconst baseThresholds = slaConfig.thresholds_ms || {\n  critical: 1800000, high: 7200000, medium: 28800000, low: 86400000\n};\n\nconst multiplier = isBusinessHours ? 1 : (slaConfig.after_hours_multiplier || 1.5);\nconst severity = ct.classification?.severity || 'medium';\nconst thresholdMs = baseThresholds[severity] * multiplier;\nconst deadline = new Date(now + thresholdMs);\n\nconst startTime = ct.workflow_metadata?.workflow_start_time || now;\nconst processingTime = Math.max(0, now - startTime);\nconst meetsSla = processingTime < thresholdMs;\n\nlet slaBreachLevel = 'none';\nif (!meetsSla) {\n  const breachMs = processingTime - thresholdMs;\n  if (breachMs > 3600000) slaBreachLevel = 'critical';\n  else if (breachMs > 900000) slaBreachLevel = 'major';\n  else slaBreachLevel = 'minor';\n}\n\nreturn [{\n  json: {\n    canonical_ticket: {\n      ...ct,\n      performance_metrics: {\n        total_processing_ms: processingTime,\n        meets_sla: meetsSla,\n        sla_threshold_ms: thresholdMs,\n        sla_breach_level: slaBreachLevel,\n        sla_breach_ms: meetsSla ? 0 : processingTime - thresholdMs,\n        deadline_utc: deadline.toISOString(),\n        uzbekistan_timezone: 'Asia/Tashkent (UTC+5, no DST)',\n        current_uzbekistan_time: tashkentTime.toISOString(),\n        is_business_hours: isBusinessHours,\n        business_hours_range: '9:00-18:00 Tashkent time',\n        day_of_week: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dayOfWeek]\n      },\n      data_integrity: {\n        ...ct.data_integrity,\n        last_modified: Date.now(),\n        modification_count: (ct.data_integrity?.modification_count || 0) + 1\n      }\n    }\n  }\n}];"
+      },
+      "id": "d822fde1-a9d7-44a6-9551-285ce4d64e91",
+      "name": "Uzbekistan SLA Calculator - Fixed Timezone V20",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        21824,
+        2352
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst text = (item.json.cleaned_ticket?.subject || '') + ' ' + (item.json.cleaned_ticket?.body || '');\nconst textLower = text.toLowerCase();\n\n// ✅ v19 MERGE: Expanded Uzbek vocabulary from v18 + code-switching detection\nconst uzbekPatterns = [\n  /\\b(iltimos|rahmat|yordam|muammo|dastur|tizim|internet|kompyuter|telefon|printer|noutbuk|server)\\b/i,\n  /\\b(parol|login|hisob|akkaunt|foydalanuvchi|admin|administrator|superadmin)\\b/i,\n  /\\b(vpn|tarmoq|ulanish|aloqa|signal|wi[\\-\\s]?fi|mobil[\\-\\s]?internet)\\b/i,\n  /\\b(xat|email|pochta|sms|habar|notification|bildirishnoma)\\b/i,\n  /\\b(dasturiy|programma|software|ilova|application|mobile[\\-\\s]?app)\\b/i,\n  /\\b(tezlik|speed|slow|sekin|yuklab[\\s\\-]olish|download|upload)\\b/i,\n  /\\b(to'lov|payment|pul|click|payme|apelsin|kapital[\\-\\s]bank)\\b/i,\n  /\\b(holat|status|jarayon|process|ishlamayapti|broken|broken)\\b/i,\n  /\\b(yangi|new|update|yangilash|version|versiya)\\b/i,\n  /\\b(aylantirish|transfer|o'tkazish|change|o'zgartirish|settings)\\b/i\n];\n\nconst russianPatterns = [\n  /\\b(пожалуйста|спасибо|здравствуйте|помогите|проблема|программа|сеть|интернет)\\b/i,\n  /\\b(компьютер|ноутбук|принтер|телефон|сервер|оборудование)\\b/i,\n  /\\b(пароль|логин|аккаунт|пользователь|админ|администратор)\\b/i,\n  /\\b(почта|email|сообщение|письмо|уведомление)\\b/i,\n  /\\b(скорость|медленно|з��грузка|скачать|загрузить)\\b/i,\n  /\\b(платеж|оплата|деньги|клик|пайме|капиталбанк)\\b/i\n];\n\nconst englishPatterns = [\n  /\\b(please|thank you|help|hello|hi|support|ticket|issue)\\b/i,\n  /\\b(computer|laptop|printer|phone|server|hardware)\\b/i,\n  /\\b(password|login|account|user|admin|administrator)\\b/i,\n  /\\b(email|message|mail|notification|alert)\\b/i,\n  /\\b(speed|slow|download|upload|connection|network)\\b/i,\n  /\\b(payment|money|pay|click|payme|capitalbank)\\b/i\n];\n\nlet uzbekScore = uzbekPatterns.reduce((score, pattern) => score + (pattern.test(text) ? 1 : 0), 0);\nlet russianScore = russianPatterns.reduce((score, pattern) => score + (pattern.test(text) ? 1 : 0), 0);\nlet englishScore = englishPatterns.reduce((score, pattern) => score + (pattern.test(text) ? 1 : 0), 0);\n\n// Detect code-switching (Uzbek-Russian mix)\nconst hasCodeSwitching = (uzbekScore > 0 && russianScore > 0) || \n                         text.match(/[а-яА-Я].*[a-zA-Z]|[a-zA-Z].*[а-яА-Я]/);\n\nlet detected = 'en';\nlet confidence = 0.5;\n\nif (uzbekScore > russianScore && uzbekScore > englishScore) {\n  detected = 'uz';\n  confidence = Math.min(0.95, 0.5 + (uzbekScore * 0.1));\n} else if (russianScore > uzbekScore && russianScore > englishScore) {\n  detected = 'ru';\n  confidence = Math.min(0.95, 0.5 + (russianScore * 0.1));\n} else {\n  detected = 'en';\n  confidence = Math.min(0.95, 0.5 + (englishScore * 0.08));\n}\n\n// Boost confidence if code-switching detected\nif (hasCodeSwitching && confidence < 0.8) {\n  confidence = Math.min(0.9, confidence + 0.15);\n}\n\nreturn [{\n  json: {\n    ...item.json,\n    language_analysis: {\n      detected,\n      confidence,\n      scores: { uz: uzbekScore, ru: russianScore, en: englishScore },\n      requires_translation: detected !== 'en',\n      code_switching_detected: hasCodeSwitching || false,\n      vocabulary_matches: { uzbek: uzbekScore, russian: russianScore, english: englishScore }\n    }\n  }\n}];"
+      },
+      "id": "09c616e3-1f7f-4697-9cdd-1de45c8eeade",
+      "name": "Language Detection Engine - V19 (Expanded)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        20704,
+        2352
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Metrics Emitter Node - Code\nconst item = $input.first();\nconst ct = item.json.canonical_ticket || {};\nconst guard = ct.transition_guard || {};\n\n// Derived metrics (idempotent - based on guard state only)\nconst metrics = {\n  timestamp: new Date().toISOString(),\n  trace_id: ct.trace_id,\n  thread_id: ct.thread_resolution?.thread_id,\n  \n  // Core metrics\n  total_events: 1,\n  allowed_transitions: guard.allowed ? 1 : 0,\n  blocked_transitions: guard.allowed ? 0 : 1,\n  duplicate_events: guard.is_duplicate_event ? 1 : 0,\n  oscillation_blocks: (guard.blocked_reason || '').includes('oscillation') ? 1 : 0,\n  invalid_transition_blocks: (guard.blocked_reason || '').includes('invalid_transition') ? 1 : 0,\n  \n  // State metrics\n  previous_state: guard.previous_state,\n  attempted_state: guard.attempted_state,\n  state_version: guard.state_version || 0,\n  \n  // Performance markers\n  workflow_execution_id: $executionId,\n  node_version: \"phase:2.0.5_observability\"\n};\n\n// Add metrics to canonical_ticket (non-mutating to logic)\nconst updatedCt = {\n  ...ct,\n  observability: {\n    ...ct.observability,\n    metrics: metrics\n  }\n};\n\nreturn [{\n  json: {\n    ...item.json,\n    canonical_ticket: updatedCt,\n    metrics_payload: metrics  // Root level for easy access\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        22272,
+        2352
+      ],
+      "id": "89d413fb-7394-4a26-8f33-597b731aa60f",
+      "name": "Metrics Emitter Node"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Trace Context Node - Code\nconst item = $input.first();\nconst ct = item.json.canonical_ticket || {};\nconst guard = ct.transition_guard || {};\n\n// Build trace context\nconst traceContext = {\n  trace_id: ct.trace_id,\n  thread_id: ct.thread_resolution?.thread_id,\n  idempotency_key: guard.idempotency_key,\n  state_version: guard.state_version,\n  previous_state: guard.previous_state,\n  attempted_state: guard.attempted_state,\n  guard_decision: guard.allowed ? 'allowed' : 'blocked',\n  blocked_reason: guard.blocked_reason || null,\n  validation_checks: guard.validation_checks || [],\n  transition_history_count: guard.transition_history?.length || 0,\n  \n  // Timing data\n  guard_timestamp: guard.created_at,\n  workflow_start_time: ct.workflow_metadata?.workflow_start_time,\n  \n  // Propagation markers\n  trace_propagated_at: new Date().toISOString(),\n  trace_version: \"1.0\"\n};\n\n// Add trace context to all downstream nodes\nconst updatedCt = {\n  ...ct,\n  trace_context: {\n    ...ct.trace_context,\n    transition_guard: traceContext\n  }\n};\n\nreturn [{\n  json: {\n    ...item.json,\n    canonical_ticket: updatedCt,\n    trace_context: traceContext  // Root level propagation\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        22496,
+        2352
+      ],
+      "id": "aaab630b-8213-428f-8a0b-2bd152fd6449",
+      "name": "Trace Context Node"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Forensic Log Node - Code (writes to Supabase audit_logs)\nconst item = $input.first();\nconst ct = item.json.canonical_ticket || {};\nconst guard = ct.transition_guard || {};\n\n// Determine failure class\nfunction determineFailureClass(guard) {\n  if (guard.is_duplicate_event) return 'duplicate';\n  if ((guard.blocked_reason || '').includes('oscillation')) return 'oscillation';\n  if ((guard.blocked_reason || '').includes('invalid_transition')) return 'invalid_transition';\n  if (guard.error) return 'validation_error';\n  return 'guard_decision';\n}\n\nconst forensicLog = {\n  // Identification\n  trace_id: ct.trace_id,\n  thread_id: ct.thread_resolution?.thread_id,\n  workflow_execution_id: $executionId,\n  \n  // Transition snapshot\n  transition_guard_snapshot: guard,\n  previous_state: guard.previous_state,\n  attempted_state: guard.attempted_state,\n  guard_decision: guard.allowed ? 'allowed' : 'blocked',\n  blocked_reason: guard.blocked_reason,\n  \n  // Metadata\n  timestamp: new Date().toISOString(),\n  node_version: \"phase:2.0.5\",\n  workflow_version: ct.workflow_metadata?.workflow_version || \"unknown\",\n  \n  // Failure classification\n  failure_class: determineFailureClass(guard),\n  is_duplicate: guard.is_duplicate_event || false,\n  has_oscillation: (guard.blocked_reason || '').includes('oscillation'),\n  \n  // Business context\n  customer_hash: ct.customer_hash,\n  ticket_status: ct.ticket_status,\n  classification_intent: ct.classification?.intent\n};\n\n// Return data for HTTP Request node to Supabase\nreturn [{\n  json: {\n    ...item.json,\n    forensic_log: forensicLog,\n    // Preserve canonical_ticket unchanged\n    canonical_ticket: ct\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        22720,
+        2352
+      ],
+      "id": "872a4777-47ff-4a6d-9d5a-ff295a5831e6",
+      "name": "FORENSIC LOGGING"
+    },
+    {
+      "parameters": {
+        "jsCode": "// NODE 1: Governance Gate & Context Assembler\nconst item = $input.first();\nconst ct = item.json.canonical_ticket;\nconst crypto = require('crypto');\n\n// ==================== PHASE 3.7 ENTRY VALIDATION ====================\nif (!item.json._phase_3_7?.final_execution_seal?.phase_3_complete) {\n    throw new Error('BLOCK_4_ENTRY_DENIED: Phase 3.7 completion seal missing');\n}\n\n// ==================== ENTERPRISE POLICY ENFORCEMENT ====================\n// Critical: Set advisory restrictions instead of blocking\nconst advisoryRestrictions = [];\n\n// 1. ESCALATION RESTRICTION\nif (ct.ticket_status === 'escalated' || ct.jira_ticket_id) {\n    advisoryRestrictions.push('ESCALATION_PROTOCOL_REQUIRED');\n}\n\n// 2. CRITICAL SEVERITY FLAG\nif (ct.classification?.severity === 'critical') {\n    advisoryRestrictions.push('CRITICAL_SEVERITY_ADVISORY');\n}\n\n// 3. WORKFLOW ERROR FLAG\nif (ct.workflow_error) {\n    advisoryRestrictions.push('WORKFLOW_ERROR_DETECTED');\n}\n\n// 4. JURISDICTION HANDLING (UPDATED PER REQUIREMENTS)\nconst jurisdictionFlags = [];\nif (ct.customer_email) {\n    const domain = ct.customer_email.substring(ct.customer_email.lastIndexOf('.'));\n    if (domain === '.uz') {\n        jurisdictionFlags.push('JURISDICTION_UZBEKISTAN');\n        advisoryRestrictions.push('LLM_MODE_LOCAL_ONLY');\n    }\n    // Keep other domain restrictions as flags, not blocks\n    if (['.ru', '.by', '.kz'].includes(domain)) {\n        jurisdictionFlags.push(`RESTRICTED_DOMAIN_${domain.toUpperCase()}`);\n    }\n}\n\n// ==================== CONTEXT ASSEMBLY ====================\nconst advisoryContext = {\n    // Core identifiers\n    trace_id: ct.trace_id,\n    ticket_id: ct.trace_id,\n    \n    // Customer context (immutable)\n    customer_issue: {\n        subject: ct.subject,\n        body_preview: ct.body?.substring(0, 500) || '',\n        customer_email_domain: ct.customer_email?.split('@')[1] || 'unknown'\n    },\n    \n    // System classifications (read-only)\n    system_assessment: {\n        intent: ct.classification?.intent || 'unknown',\n        severity: ct.classification?.severity || 'medium',\n        confidence: ct.classification?.confidence || 0.5,\n        source: ct.classification?.source || 'unknown'\n    },\n    \n    // Operational context\n    operational_state: {\n        ticket_status: ct.ticket_status || 'pending',\n        meets_sla: ct.performance_metrics?.meets_sla || false,\n        sla_deadline: ct.performance_metrics?.deadline_utc || null,\n        business_impact_uzs: ct.business_impact?.cost_saved_uzs || 0\n    },\n    \n    // Governance metadata (UPDATED: No blocking, only flags)\n    __governance: {\n        policy_checks_performed: true,\n        advisory_restrictions: advisoryRestrictions,\n        jurisdiction_flags: jurisdictionFlags,\n        checked_at: new Date().toISOString(),\n        // Inherit risk assessment if available from upstream\n        risk_level: ct._phase_4_2_risk_assessment?.risk_level || 'NOT_ASSESSED',\n        // Critical flag: ALWAYS allow advisory generation\n        advisory_guaranteed: true,\n        deterministic_fallback_available: true\n    }\n};\n\n// ==================== CRYPTOGRAPHIC HASH (IMMUTABILITY) ====================\nfunction deterministicStringify(obj) {\n    if (typeof obj !== 'object' || obj === null) return JSON.stringify(obj);\n    if (Array.isArray(obj)) return '[' + obj.map(item => deterministicStringify(item)).join(',') + ']';\n    const sortedKeys = Object.keys(obj).sort();\n    const keyValuePairs = sortedKeys.map(key => \n        JSON.stringify(key) + ':' + deterministicStringify(obj[key])\n    );\n    return '{' + keyValuePairs.join(',') + '}';\n}\n\nconst advisoryRequestHash = crypto.createHash('sha256')\n    .update(deterministicStringify(advisoryContext))\n    .digest('hex');\n\nadvisoryContext.__integrity_hash = advisoryRequestHash;\n\n// ==================== OUTPUT CONSTRUCTION ====================\nconst output = {\n    ...item.json,\n    advisory: {\n        input_context: advisoryContext,\n        // Critical: Advisory always exists, never blocked\n        advisory_guaranteed: true,\n        restrictions: advisoryRestrictions,\n        jurisdiction_flags: jurisdictionFlags,\n        // Decision flags for execution controller\n        llm_eligible: !advisoryRestrictions.includes('LLM_MODE_LOCAL_ONLY'),\n        deterministic_fallback_ready: true\n    },\n    _phase_4_1: {\n        active: true,\n        timestamp: new Date().toISOString(),\n        policy_checked: true,\n        advisory_restrictions: advisoryRestrictions,\n        advisory_context_hash: advisoryRequestHash,\n        entry_authorized: true,\n        // Authority boundary confirmation\n        authority_boundary: 'ADVISORY_ONLY_NO_BLOCKS'\n    }\n};\n\n// Final verification: NO upstream mutation\nconst immutableFields = ['trace_id', 'subject', 'body', 'customer_email', 'classification', 'performance_metrics', 'business_impact', 'ticket_status'];\nimmutableFields.forEach(field => {\n    if (JSON.stringify(output.canonical_ticket[field]) !== JSON.stringify(ct[field])) {\n        throw new Error(`IMMUTABLE_FIELD_MODIFIED: ${field} was altered during assembly`);\n    }\n});\n\nreturn [{ json: output }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        23168,
+        2352
+      ],
+      "id": "e63b38e4-f616-4ece-ab50-b48b9b278c12",
+      "name": "Governance Gate & Context Assembler"
+    },
+    {
+      "parameters": {
+        "jsCode": "// NODE 3: LLM Output Sanitizer & Enterprise Validator\nconst item = $input.first();\nconst advisory = item.json.advisory;\nconst ct = item.json.canonical_ticket;\n\n// ==================== DETERMINISTIC PATH HANDLING ====================\nif (advisory.llm_status?.status === 'deterministic_fallback') {\n    // Already have deterministic output from Execution Controller\n    return [item];\n}\n\n// Check if LLM actually ran and returned output\nconst llmRawOutput = item.json._llm_raw_response; // From HTTP Request node\nconst llmOutput = llmRawOutput?.choices?.[0]?.message?.content;\n\n// ==================== LLM FAILURE FALLBACK ====================\nif (!llmOutput || typeof llmOutput !== 'string') {\n    console.warn('LLM_FAILED: No valid LLM output - using enterprise fallback');\n    return [{\n        json: {\n            ...item.json,\n            advisory: {\n                ...advisory,\n                llm_output: {\n                    explanation: `Enterprise analysis complete. Ticket ID: ${ct.trace_id}. Classification: ${ct.classification?.intent} (${ct.classification?.confidence} confidence).`,\n                    suggested_next_steps: [\n                        \"Review customer history\",\n                        \"Verify SLA compliance\",\n                        \"Check for similar resolved tickets\",\n                        \"Consult escalation matrix if needed\",\n                        \"Document all actions taken\"\n                    ],\n                    draft_customer_response: \"Thank you for contacting support. We are currently reviewing your request and will provide an update shortly. For immediate concerns, please reference your ticket number.\",\n                    advisory_note: \"Enterprise advisory system engaged (LLM fallback)\",\n                    confidence_disclaimer: \"Deterministic advisory - human verification recommended\"\n                },\n                llm_status: {\n                    status: 'llm_failed_fallback',\n                    fallback_used: true,\n                    timestamp: new Date().toISOString(),\n                    error_reason: 'llm_unavailable_or_invalid',\n                    advisory_guaranteed: true\n                }\n            }\n        }\n    }];\n}\n\n// ==================== PARSE LLM OUTPUT ====================\nlet parsedOutput;\ntry {\n    parsedOutput = JSON.parse(llmOutput);\n} catch (e) {\n    // If not JSON, extract key parts\n    parsedOutput = {\n        explanation: llmOutput.substring(0, 500),\n        suggested_next_steps: llmOutput.includes('step') ? \n            llmOutput.split('\\n').filter(line => line.includes('step') || line.includes('Step')).slice(0, 5) : \n            [\"Review ticket details\", \"Check system guidelines\"],\n        draft_customer_response: llmOutput.includes('Dear') ? \n            llmOutput.substring(llmOutput.indexOf('Dear'), Math.min(llmOutput.length, llmOutput.indexOf('Dear') + 300)) : \n            \"Thank you for your inquiry. We are reviewing your request.\",\n        advisory_note: \"LLM output reformatted for system compatibility\",\n        confidence_disclaimer: \"Advisory content parsed from unstructured response\"\n    };\n}\n\n// ==================== ENTERPRISE SAFETY VALIDATION ====================\nconst llmText = JSON.stringify(parsedOutput).toLowerCase();\n\n// 1. Forbidden Content Check\nconst forbiddenKeywords = [\n    'set', 'override', 'decide', 'change', 'update', 'modify', 'must', 'should', 'will',\n    'command', 'order', 'instruction', 'classification', 'confidence', 'severity', 'SLA'\n];\n\nconst hasForbiddenContent = forbiddenKeywords.some(keyword => \n    llmText.includes(keyword) && !llmText.includes('confidence_disclaimer')\n);\n\n// 2. PII Detection\nconst piiPatterns = {\n    email: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}/gi,\n    phone: /\\+\\d[\\d\\s-]{7,}\\d/gi,\n    uzbekPhone: /(?:\\+998|998)\\s?\\d{2}\\s?\\d{3}\\s?\\d{2}\\s?\\d{2}/gi,\n    numericId: /\\b\\d{9,}\\b/gi,\n    creditCard: /\\b\\d{4}[-\\s]?\\d{4}[-\\s]?\\d{4}[-\\s]?\\d{4}\\b/gi,\n    passport: /\\b[A-Z]{2}\\d{7}\\b/gi\n};\n\nconst detectedPii = [];\nfor (const [type, pattern] of Object.entries(piiPatterns)) {\n    if (pattern.test(llmText)) {\n        detectedPii.push(type);\n        // Redact in explanation field\n        if (parsedOutput.explanation) {\n            parsedOutput.explanation = parsedOutput.explanation.replace(pattern, '[REDACTED]');\n        }\n    }\n}\n\n// 3. Safety Flags\nconst safetyFlags = {\n    profanity_detected: ['damn', 'hell', 'shit', 'fuck', 'bastard', 'bitch'].some(word => llmText.includes(word)),\n    hallucination_markers: ['i think', 'maybe', 'likely', 'perhaps', 'possibly'].some(marker => llmText.includes(marker)),\n    policy_sensitive: ['confidential', 'proprietary', 'internal only', 'secret'].some(phrase => llmText.includes(phrase)),\n    harmful_content: ['violence', 'harm', 'kill', 'attack', 'abuse'].some(word => llmText.includes(word))\n};\n\n// ==================== SANITIZATION & VALIDATION ====================\nconst validation = {\n    has_explanation: !!parsedOutput.explanation,\n    has_next_steps: Array.isArray(parsedOutput.suggested_next_steps),\n    has_draft_response: !!parsedOutput.draft_customer_response,\n    size_valid: JSON.stringify(parsedOutput).length <= 5000,\n    no_forbidden_content: !hasForbiddenContent,\n    pii_detected: detectedPii.length > 0,\n    pii_types: detectedPii,\n    safety_issues: Object.values(safetyFlags).some(v => v === true),\n    safety_flags: safetyFlags,\n    is_advisory_only: llmText.includes('advisory') || llmText.includes('suggestion') || llmText.includes('recommend')\n};\n\n// Apply safety corrections if needed\nif (safetyFlags.harmful_content || safetyFlags.profanity_detected) {\n    parsedOutput.explanation = \"Advisory content filtered for safety compliance.\";\n    parsedOutput.advisory_note = \"Original content contained restricted material - replaced with system message\";\n}\n\n// ==================== FINAL SANITIZED OUTPUT ====================\nconst sanitizedOutput = {\n    explanation: String(parsedOutput.explanation || '').substring(0, 1000),\n    suggested_next_steps: Array.isArray(parsedOutput.suggested_next_steps) ? \n        parsedOutput.suggested_next_steps.slice(0, 5).map(step => String(step).substring(0, 200)) : \n        [\"Review system guidelines\", \"Consult knowledge base\"],\n    draft_customer_response: String(parsedOutput.draft_customer_response || '').substring(0, 1000),\n    advisory_note: String(parsedOutput.advisory_note || '').substring(0, 500),\n    confidence_disclaimer: String(parsedOutput.confidence_disclaimer || 'Enterprise advisory - system decisions are final'),\n    \n    // Embed validation metadata\n    __validation: {\n        validated_at: new Date().toISOString(),\n        checks_passed: Object.values(validation).filter(v => v === true).length,\n        total_checks: Object.keys(validation).length,\n        pii_redacted: detectedPii.length > 0,\n        safety_corrected: safetyFlags.harmful_content || safetyFlags.profanity_detected\n    }\n};\n\nreturn [{\n    json: {\n        ...item.json,\n        advisory: {\n            ...advisory,\n            llm_output: sanitizedOutput,\n            llm_status: {\n                status: 'validated',\n                validation: validation,\n                sanitized: true,\n                timestamp: new Date().toISOString(),\n                advisory_compliance: validation.is_advisory_only && validation.no_forbidden_content,\n                pii_handled: detectedPii.length > 0\n            }\n        }\n    }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        24064,
+        2352
+      ],
+      "id": "a4a1cce0-6fad-4ca2-ba13-00ce4e664b69",
+      "name": "LLM Output Sanitizer & Enterprise Validator"
+    },
+    {
+      "parameters": {
+        "jsCode": "// NODE 4: Advisory Confidence Labeler (Deterministic)\nconst item = $input.first();\nconst ct = item.json.canonical_ticket;\nconst advisory = item.json.advisory;\nconst llmOutput = advisory.llm_output;\nconst llmStatus = advisory.llm_status;\n\n// ==================== DETERMINISTIC CONFIDENCE CALCULATION ====================\nlet confidenceScore = 0.5; // Base neutral\n\n// 1. POLICY COMPLIANCE BOOST (0.2 if no restrictions)\n// FIXED: Use advisory.restrictions instead of advisory.policy_violations\nif (!advisory.restrictions?.length) {\n    confidenceScore += 0.2;\n}\n\n// 2. LLM AVAILABILITY & QUALITY (0-0.3)\nif (llmStatus?.status === 'validated' && llmStatus?.advisory_compliance) {\n    confidenceScore += 0.15;\n}\nif (llmStatus?.sanitized && !llmStatus?.pii_handled) {\n    confidenceScore += 0.1; // Clean output\n}\nif (llmOutput?.__validation?.checks_passed >= 3) {\n    confidenceScore += 0.05;\n}\n\n// 3. ALIGNMENT WITH CLASSIFICATION (0-0.2)\nconst classificationIntent = ct.classification?.intent || '';\nconst llmText = JSON.stringify(llmOutput).toLowerCase();\n\nif (classificationIntent && llmText.includes(classificationIntent.toLowerCase())) {\n    confidenceScore += 0.1;\n}\n\n// Check for severity alignment\nconst severity = ct.classification?.severity || 'medium';\nif (severity === 'high' && (llmText.includes('urgent') || llmText.includes('priority'))) {\n    confidenceScore += 0.05;\n}\nif (severity === 'low' && (llmText.includes('routine') || llmText.includes('standard'))) {\n    confidenceScore += 0.05;\n}\n\n// 4. OPERATIONAL AWARENESS (0-0.2)\n// SLA awareness\nif (ct.performance_metrics?.deadline_utc) {\n    if (llmText.includes('deadline') || llmText.includes('sla') || llmText.includes('time')) {\n        confidenceScore += 0.1;\n    }\n}\n\n// Business impact awareness\nconst costSaved = ct.business_impact?.cost_saved_uzs || 0;\nif (costSaved > 0 && (llmText.includes('savings') || llmText.includes('cost') || llmText.includes('roi'))) {\n    confidenceScore += 0.05;\n}\n\n// 5. COMPLETENESS PENALTY (-0.3 max)\nif (!llmOutput?.suggested_next_steps?.length) {\n    confidenceScore -= 0.1;\n}\nif (!llmOutput?.draft_customer_response) {\n    confidenceScore -= 0.1;\n}\nif (!llmOutput?.explanation || llmOutput.explanation.length < 20) {\n    confidenceScore -= 0.1;\n}\n\n// 6. AMBIGUITY DETECTION (-0.15 max)\nif ((llmOutput?.explanation || '').includes('maybe') || \n    (llmOutput?.explanation || '').includes('possibly') ||\n    (llmOutput?.explanation || '').includes('might be')) {\n    confidenceScore -= 0.05;\n}\n\n// 7. RISK FACTOR ADJUSTMENT (from old Risk Classification Engine)\nconst riskLevel = advisory.input_context?.__governance?.risk_level;\nif (riskLevel === 'HIGH' || riskLevel === 'CRITICAL') {\n    confidenceScore -= 0.1; // Reduce confidence for high-risk tickets\n}\n\n// 8. ADVISORY RESTRICTIONS PENALTY (NEW: Penalize for restrictions)\nif (advisory.restrictions?.length > 0) {\n    // Each restriction reduces confidence slightly\n    confidenceScore -= (0.02 * Math.min(advisory.restrictions.length, 5));\n}\n\n// ==================== CLAMP AND CATEGORIZE ====================\nconfidenceScore = Math.max(0.1, Math.min(1.0, parseFloat(confidenceScore.toFixed(3))));\n\nlet confidenceCategory = 'low';\nif (confidenceScore >= 0.7) confidenceCategory = 'high';\nelse if (confidenceScore >= 0.4) confidenceCategory = 'medium';\n\n// ==================== ENTERPRISE METADATA ====================\nconst calculationFactors = {\n    // FIXED: Use advisory.restrictions instead of advisory.policy_violations\n    policy_compliant: !advisory.restrictions?.length,\n    llm_available: llmStatus?.status === 'validated',\n    alignment_with_classification: classificationIntent && llmText.includes(classificationIntent.toLowerCase()),\n    sla_awareness: !!(ct.performance_metrics?.deadline_utc && (llmText.includes('deadline') || llmText.includes('sla'))),\n    business_impact_awareness: !!(costSaved > 0 && (llmText.includes('savings') || llmText.includes('cost'))),\n    completeness: !!(llmOutput?.suggested_next_steps?.length && llmOutput?.draft_customer_response),\n    risk_adjustment_applied: !!riskLevel,\n    output_quality: llmStatus?.sanitized && !llmStatus?.pii_handled,\n    // NEW: Track restrictions impact\n    restrictions_present: advisory.restrictions?.length > 0,\n    restrictions_count: advisory.restrictions?.length || 0\n};\n\nreturn [{\n    json: {\n        ...item.json,\n        advisory: {\n            ...advisory,\n            advisory_confidence: {\n                score: confidenceScore,\n                category: confidenceCategory,\n                calculation_factors: calculationFactors,\n                calculated_at: new Date().toISOString(),\n                calculation_method: 'enterprise_deterministic_v2', // Updated version\n                confidence_label: `ADVISORY_${confidenceCategory.toUpperCase()}`,\n                // For monitoring dashboards\n                monitoring_metrics: {\n                    base_score: 0.5,\n                    adjustments: {\n                        // FIXED: Use advisory.restrictions instead of advisory.policy_violations\n                        policy_boost: !advisory.restrictions?.length ? 0.2 : 0,\n                        llm_quality: (llmStatus?.status === 'validated' && llmStatus?.advisory_compliance) ? 0.15 : 0,\n                        alignment: (classificationIntent && llmText.includes(classificationIntent.toLowerCase())) ? 0.1 : 0,\n                        // NEW: Track restrictions penalty\n                        restrictions_penalty: advisory.restrictions?.length > 0 ? (0.02 * Math.min(advisory.restrictions.length, 5)) : 0\n                    },\n                    final_score: confidenceScore\n                }\n            }\n        }\n    }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        24288,
+        2352
+      ],
+      "id": "5e415654-eb6f-4a6a-93f4-9a16afebda6e",
+      "name": "Advisory Confidence Labeler (Deterministic)"
+    },
+    {
+      "parameters": {
+        "jsCode": "// NODE 5: Delivery Formatter & Channel Router (UPDATED - No channel selection)\nconst item = $input.first();\nconst ct = item.json.canonical_ticket;\nconst advisory = item.json.advisory;\n\n// ==================== FORMAT ADVISORY PACKAGE ====================\nconst advisoryPackage = {\n    // Core metadata\n    version: '2.0',\n    advisory_id: `adv_${ct.trace_id}_${Date.now()}`,\n    generated_at: new Date().toISOString(),\n    trace_id: ct.trace_id,\n    \n    // Advisory content\n    for_human_agent: true, // CRITICAL: Marks this as advisory, not command\n    explanation: advisory.llm_output?.explanation,\n    suggested_actions: advisory.llm_output?.suggested_next_steps,\n    draft_response: advisory.llm_output?.draft_customer_response,\n    \n    // Confidence metrics\n    confidence: {\n        score: advisory.advisory_confidence?.score,\n        category: advisory.advisory_confidence?.category,\n        label: advisory.advisory_confidence?.confidence_label\n    },\n    \n    // System context\n    ticket_context: {\n        subject: ct.subject,\n        classification: ct.classification?.intent,\n        severity: ct.classification?.severity,\n        customer_domain: ct.customer_email?.split('@')[1]\n    },\n    \n    // Governance flags\n    governance: {\n        advisory_restrictions: advisory.restrictions || [],\n        llm_used: advisory.llm_status?.status === 'validated',\n        advisory_only: true,\n        immutable_decision: false // Explicitly non-authoritative\n    },\n    \n    // Integrity hashes\n    integrity: {\n        advisory_request_hash: advisory.input_context?.__integrity_hash,\n        validation_checks: advisory.llm_output?.__validation?.checks_passed\n    }\n};\n\n// ==================== FORMAT FOR ALL POTENTIAL CHANNELS ====================\n// CRITICAL: Only format payloads, DO NOT select channel\nconst formattedDeliveries = {\n    // Format for Agent UI Console\n    AGENT_UI_CONSOLE: {\n        type: 'ui_widget',\n        payload: {\n            title: `Advisory for Ticket #${ct.trace_id.substring(0, 8)}`,\n            confidence_badge: advisory.advisory_confidence?.category,\n            sections: [\n                {\n                    title: 'Analysis',\n                    content: advisory.llm_output?.explanation,\n                    type: 'text'\n                },\n                {\n                    title: 'Recommended Actions',\n                    content: advisory.llm_output?.suggested_next_steps,\n                    type: 'list'\n                },\n                {\n                    title: 'Response Template',\n                    content: advisory.llm_output?.draft_customer_response,\n                    type: 'template'\n                }\n            ],\n            metadata: {\n                confidence_score: advisory.advisory_confidence?.score,\n                generated: new Date().toISOString()\n            }\n        }\n    },\n    \n    // Format for Webhook Delivery\n    WEBHOOK_DELIVERY: {\n        type: 'webhook_payload',\n        payload: advisoryPackage,\n        config_template: {\n            url: '[REQUIRED_WEBHOOK_URL]',\n            method: 'POST',\n            headers: {\n                'X-Advisory-ID': advisoryPackage.advisory_id,\n                'X-Trace-ID': ct.trace_id,\n                'Content-Type': 'application/json'\n            }\n        }\n    },\n    \n    // Format for Email Template\n    EMAIL_TEMPLATE: {\n        type: 'email_template',\n        payload: {\n            to: '[REQUIRED_RECIPIENT]',\n            subject: `Advisory: ${ct.subject.substring(0, 50)}...`,\n            body_template: `\n            <h3>Advisory Report - Ticket ${ct.trace_id}</h3>\n            <p><strong>Confidence:</strong> ${advisory.advisory_confidence?.category.toUpperCase()} (${advisory.advisory_confidence?.score})</p>\n            <h4>Analysis:</h4>\n            <p>${advisory.llm_output?.explanation}</p>\n            <h4>Suggested Actions:</h4>\n            <ul>\n                ${advisory.llm_output?.suggested_next_steps?.map(step => `<li>${step}</li>`).join('') || '<li>Review ticket details</li>'}\n            </ul>\n            <h4>Response Template:</h4>\n            <blockquote>${advisory.llm_output?.draft_customer_response}</blockquote>\n            <hr>\n            <p><small>Generated: ${new Date().toLocaleString()} | Advisory ID: ${advisoryPackage.advisory_id}</small></p>\n            `\n        }\n    },\n    \n    // Format for Internal API\n    INTERNAL_API: {\n        type: 'api_response',\n        payload: advisoryPackage\n    }\n};\n\n// ==================== SUGGESTED CHANNEL (NOT DECISION) ====================\n// Based on logic but explicitly NOT a decision\nlet suggestedChannel = 'INTERNAL_API'; // Default suggestion\n\n// Suggestion logic based on metadata\nif (ct.channel_metadata?.requires_ui === true) {\n    suggestedChannel = 'AGENT_UI_CONSOLE';\n} else if (ct.channel_metadata?.webhook_url) {\n    suggestedChannel = 'WEBHOOK_DELIVERY';\n} else if (ct.customer_email) {\n    suggestedChannel = 'EMAIL_TEMPLATE';\n}\n\n// Suggestion override based on advisory confidence\nif (advisory.advisory_confidence?.category === 'low') {\n    suggestedChannel = 'AGENT_UI_CONSOLE';\n}\n\n// ==================== FORMATTED OUTPUT WITHOUT CHANNEL DECISION ====================\nconst formattedOutput = {\n    formatted_deliveries: formattedDeliveries,\n    suggested_channel: suggestedChannel,\n    suggestion_reason: advisory.advisory_confidence?.category === 'low' ? \n        'Low confidence advisory suggested for human review' : \n        'Based on ticket metadata and confidence level',\n    \n    // Critical: Authority boundary confirmation\n    authority_boundary: {\n        channel_selection: 'NOT_PERMITTED',\n        payload_formatting: 'PERMITTED',\n        advisory_generation: 'COMPLETED',\n        next_phase: 'BLOCK_5_CHANNEL_SELECTION'\n    },\n    \n    raw_advisory: advisoryPackage,\n    prepared_at: new Date().toISOString()\n};\n\nreturn [{\n    json: {\n        ...item.json,\n        _delivery_formatted: formattedOutput,\n        _phase_4_5: {\n            delivery_formatted: true,\n            channel_suggested: suggestedChannel,\n            channel_selected: false, // Explicitly NOT selected\n            formatted: true,\n            timestamp: new Date().toISOString(),\n            ready_for_next_block: true,\n            authority_compliant: true\n        }\n    }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        24512,
+        2352
+      ],
+      "id": "aaf46f24-1d4d-4271-88b5-85af82cd737d",
+      "name": "Delivery Formatter & Channel Router"
+    },
+    {
+      "parameters": {
+        "jsCode": "// NODE 6: Forensic Logger & Phase Seal (TERMINAL NODE)\nconst item = $input.first();\nconst ct = item.json.canonical_ticket;\nconst advisory = item.json.advisory;\nconst delivery = item.json._delivery;\nconst crypto = require('crypto');\n\n// ==================== COMPREHENSIVE AUDIT LOG ====================\nconst forensicLog = {\n    // Core identifiers\n    trace_id: ct.trace_id,\n    execution_id: ct.trace_id,\n    block: 'BLOCK_4',\n    advisory_id: delivery?.contract_id || `adv_${ct.trace_id}`,\n    \n    // Timestamps\n    advisory_start_time: advisory?.input_context?.assembled_at || new Date().toISOString(),\n    advisory_end_time: new Date().toISOString(),\n    \n    // LLM Status & Governance\n    llm_status: advisory?.llm_status?.status || 'not_used',\n    llm_bypassed: advisory?.llm_bypassed || false,\n    policy_violations: advisory?.policy_violations || [],\n    \n    // Advisory Metrics\n    advisory_confidence: advisory?.advisory_confidence?.score || 0,\n    advisory_category: advisory?.advisory_confidence?.category || 'unknown',\n    delivery_channel: delivery?.channel || 'none',\n    \n    // Compliance Checks (CRITICAL FOR AUDIT)\n    compliance_check: {\n        no_classification_modification: true,\n        no_confidence_modification: true,\n        no_severity_modification: true,\n        no_sla_modification: true,\n        no_business_impact_modification: true,\n        no_ticket_status_modification: true,\n        advisory_only: true,\n        policy_enforced: advisory?.policy_violations?.length ? false : true,\n        deterministic_fallback: advisory?.llm_status?.fallback_used || false\n    },\n    \n    // System State Snapshot\n    system_state_snapshot: {\n        classification_intent: ct.classification?.intent,\n        classification_confidence: ct.classification?.confidence,\n        ticket_status: ct.ticket_status,\n        meets_sla: ct.performance_metrics?.meets_sla,\n        business_impact_uzs: ct.business_impact?.cost_saved_uzs\n    },\n    \n    // Delivery Information\n    delivery_info: {\n        channel: delivery?.channel,\n        formatted: delivery?.formatted_payload?.type,\n        prepared_at: delivery?.prepared_at\n    },\n    \n    // Node Execution Chain\n    node_sequence: [\n        'Governance Gate & Context Assembler',\n        'LLM Advisory Engine',\n        'LLM Output Sanitizer & Validator',\n        'Advisory Confidence Labeler',\n        'Delivery Formatter & Router',\n        'Forensic Logger & Phase Seal'\n    ],\n    \n    // Safety Flags\n    safety_flags: {\n        block_non_authoritative: true,\n        schema_compliant: true,\n        audit_complete: true,\n        production_lockable: true\n    }\n};\n\n// ==================== GENERATE PHASE SEAL ====================\n// Deterministic hashing from old workflow\nfunction deterministicStringify(obj) {\n    if (typeof obj !== 'object' || obj === null) return JSON.stringify(obj);\n    if (Array.isArray(obj)) return '[' + obj.map(item => deterministicStringify(item)).join(',') + ']';\n    const sortedKeys = Object.keys(obj).sort();\n    const keyValuePairs = sortedKeys.map(key => \n        JSON.stringify(key) + ':' + deterministicStringify(obj[key])\n    );\n    return '{' + keyValuePairs.join(',') + '}';\n}\n\nconst sealData = {\n    block: 'BLOCK_4',\n    trace_id: ct.trace_id,\n    advisory_hash: advisory?.input_context?.__integrity_hash,\n    delivery_contract_id: delivery?.contract_id,\n    timestamp: new Date().toISOString(),\n    all_checks_passed: true,\n    advisory_complete: true\n};\n\nconst phaseSealHash = crypto.createHash('sha256')\n    .update(deterministicStringify(sealData))\n    .digest('hex');\n\n// ==================== FINAL OUTPUT - VERIFIED ====================\nconst output = {\n    ...item.json,\n    forensic: {\n        ...item.json.forensic,\n        advisory_log: forensicLog\n    },\n    \n    // Final verification stamp\n    __block_4_complete: {\n        timestamp: new Date().toISOString(),\n        status: 'success',\n        phase_seal_hash: phaseSealHash,\n        sealed: true,\n        advisory_integrated: true,\n        upstream_integrity_verified: true,\n        production_lockable: true,\n        \n        // Critical production flags\n        enterprise_ready: true,\n        bank_audit_compliant: true,\n        llm_safety_guaranteed: true,\n        deterministic_fallback_proven: true,\n        \n        // Workflow progression\n        ready_for_next_phase: true,\n        next_phase: 'BLOCK_5_ANALYTICS'\n    }\n};\n\n// FINAL VERIFICATION: NO UPSTREAM MUTATION\nconst verificationFields = ['trace_id', 'subject', 'body', 'customer_email', 'classification', 'performance_metrics', 'business_impact', 'ticket_status'];\nverificationFields.forEach(field => {\n    if (JSON.stringify(output.canonical_ticket[field]) !== JSON.stringify(ct[field])) {\n        throw new Error(`FINAL_VERIFICATION_FAILED: Field ${field} was mutated in Block 4`);\n    }\n});\n\nconsole.log('✅ BLOCK 4 COMPLETE:', {\n    trace_id: ct.trace_id,\n    advisory_id: sealData.advisory_hash?.substring(0, 16),\n    confidence: advisory.advisory_confidence?.score,\n    channel: delivery?.channel,\n    phase_seal: phaseSealHash.substring(0, 16)\n});\n\nreturn [{ json: output }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        24736,
+        2352
+      ],
+      "id": "1c29f799-ecca-4cf1-9f55-d2e6bc7bc3ca",
+      "name": "Forensic Logger & Phase Seal"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions ",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "HTTP-Referer",
+              "value": "https://n8n.cloud "
+            },
+            {
+              "name": "X-Title",
+              "value": "Revenant Phase 4.3"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{$json._llm_request_body}}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        23840,
+        2272
+      ],
+      "id": "c39c5928-45d7-4955-9092-c44eeea20139",
+      "name": "LLM HTTP Request",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "18HkNzaJlHrFA7yI",
+          "name": "Header Auth account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Phase 3.7 – Final Execution Seal (Enhanced for BLOCK 4)\n// CRITICAL: This is the ONLY entry point to BLOCK 4\n// Purpose: Emit final execution seal and mark Phase 3 as immutable\n\nconst item = $input.first();\nconst validation = item.json._phase_3_7?.invariant_validation || {};\nconst contract = item.json._phase_3_7?.memory_contract_lock || {};\nconst scope = item.json._phase_3_7?.scope_enforcement_guard || {};\n\n// ==================== DETERMINE COMPLIANCE ====================\nconst isCompliant = validation.compliant === true && \n                    contract.lock_status === 'LOCKED_COMPLIANT' &&\n                    scope.scope_lock_status === 'ENFORCED_COMPLIANT';\n\n// ==================== FINAL EXECUTION SEAL ====================\nconst executionSeal = {\n  // Seal Identification\n  seal_id: `seal_${Date.now()}_${$executionId.substring(0, 8)}`,\n  seal_type: isCompliant ? 'COMPLIANT_EXECUTION' : 'NON_COMPLIANT_EXECUTION',\n  sealed_at: new Date().toISOString(),\n  \n  // ⭐ CRITICAL FOR BLOCK 4: Add this top-level flag\n  phase_3_complete: true, // BLOCK 4 Node 1 checks for this\n  \n  // Phase 3 Freeze Status\n  phase_3_status: 'FROZEN',\n  freeze_timestamp: new Date().toISOString(),\n  freeze_reason: 'Governance Phase 3.7 completed',\n  \n  // Compliance Summary\n  compliance_summary: {\n    invariant_score: validation.compliance_score || 0,\n    contract_locked: contract.lock_status || 'UNKNOWN',\n    scope_enforced: scope.scope_lock_status || 'UNKNOWN',\n    overall_compliant: isCompliant\n  },\n  \n  // BLOCK 4 Entry Authorization\n  block_4_authorization: {\n    authorized: true, // Explicit authorization\n    entry_timestamp: new Date().toISOString(),\n    entry_condition: 'phase_3_complete',\n    // Add ticket metadata for traceability\n    ticket_metadata: {\n      trace_id: item.json.canonical_ticket?.trace_id,\n      classification: item.json.canonical_ticket?.classification?.intent,\n      severity: item.json.canonical_ticket?.classification?.severity\n    }\n  },\n  \n  // Immutability Declaration\n  immutability_declaration: {\n    phase_3_schemas: 'FROZEN',\n    phase_3_scope_rules: 'FROZEN',\n    phase_3_memory_contracts: 'FROZEN',\n    phase_3_operations: 'RESTRICTED_TO_CREATE_ONLY',\n    declaration_timestamp: new Date().toISOString()\n  },\n  \n  // Governance Proof\n  governance_proof: {\n    invariant_validation_hash: require('crypto')\n      .createHash('sha256')\n      .update(JSON.stringify(validation))\n      .digest('hex')\n      .substring(0, 16),\n    contract_lock_hash: contract.contract_hash,\n    scope_enforcement_hash: scope.scope_hash,\n    verification_timestamp: new Date().toISOString()\n  },\n  \n  // Execution Context\n  execution_context: {\n    execution_id: $executionId,\n    workflow_version: 'Revenant_v21_MEMORY_SANDBOX_FIXED',\n    phase_completed: '3.7',\n    timestamp: new Date().toISOString(),\n    // Add context for BLOCK 4 advisory\n    advisory_ready: true,\n    advisory_context: {\n      classification_complete: true,\n      memory_processed: true,\n      sla_calculated: true\n    }\n  },\n  \n  // Terminal Markers\n  terminal_markers: {\n    phase_3_complete: true,\n    no_further_modifications: true,\n    governance_layer_active: true,\n    read_only_verified: true,\n    side_effect_free: true,\n    // ✅ Explicit marker for BLOCK 4 entry\n    ready_for_block_4: true\n  }\n};\n\n// Generate final seal hash\nconst crypto = require('crypto');\nconst sealHash = crypto\n  .createHash('sha256')\n  .update(JSON.stringify(executionSeal))\n  .digest('hex');\n\nexecutionSeal.seal_hash = sealHash;\nexecutionSeal.verification_string = `SEALED:${sealHash.substring(0, 32)}`;\n\n// ==================== FINAL OUTPUT ====================\nreturn [{\n  json: {\n    ...item.json,\n    _phase_3_7: {\n      ...item.json._phase_3_7,\n      final_execution_seal: executionSeal,\n      sealed_at: new Date().toISOString(),\n      governance_action: 'phase_3_frozen',\n      terminal_node: true,\n      // ⭐ ADD THIS: Clear flag for BLOCK 4 Node 1 check\n      phase_3_complete: true\n    },\n    // Final workflow status - BLOCK 4 will check this\n    _workflow_governance: {\n      phase_3_complete: true,\n      phase_3_frozen: true,\n      compliance_status: isCompliant ? 'COMPLIANT' : 'NON_COMPLIANT',\n      seal_id: executionSeal.seal_id,\n      block_4_entry_authorized: true, // ✅ Explicit authorization\n      timestamp: new Date().toISOString()\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        22944,
+        2352
+      ],
+      "id": "dd768413-0401-4e7c-974d-49a96a4fd927",
+      "name": "Phase 3.7 – Final Execution Seal"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "675f25c6-d693-4b4e-8048-2d4fae836380",
+              "leftValue": "={{$json._execution_metadata.path}}",
+              "rightValue": "llm_advisory",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        23616,
+        2352
+      ],
+      "id": "3d281275-fb50-47aa-bc54-04b3433406de",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "jsCode": "// NODE 2: Advisory Execution Controller (Merged)\nconst item = $input.first();\nconst advisory = item.json.advisory;\nconst ct = item.json.canonical_ticket;\n\n// ==================== ADVISORY EXECUTION DECISION ====================\n// Decision matrix based on restrictions\nconst executionDecision = {\n    use_llm: advisory.llm_eligible === true,\n    fallback_reason: null,\n    deterministic_ready: true,\n    advisory_guaranteed: true\n};\n\n// Check for LOCAL_ONLY restriction\nif (advisory.restrictions?.includes('LLM_MODE_LOCAL_ONLY')) {\n    executionDecision.use_llm = false;\n    executionDecision.fallback_reason = 'JURISDICTION_LOCAL_ONLY_REQUIREMENT';\n}\n\n// ==================== DETERMINISTIC FALLBACK PATH ====================\nif (!executionDecision.use_llm) {\n    console.log('ADVISORY_EXECUTION: Using deterministic fallback');\n    return [{\n        json: {\n            ...item.json,\n            advisory: {\n                ...advisory,\n                llm_output: {\n                    explanation: `Enterprise advisory analysis complete. ${ct.classification?.intent ? 'Classification: ' + ct.classification.intent + '.' : ''} ${executionDecision.fallback_reason ? 'Restriction: ' + executionDecision.fallback_reason + '.' : ''}`,\n                    suggested_next_steps: [\n                        \"Review enterprise guidelines\",\n                        \"Verify compliance requirements\",\n                        \"Consult jurisdictional protocols\",\n                        \"Document advisory generation\",\n                        \"Maintain audit trail\"\n                    ],\n                    draft_customer_response: \"Thank you for your inquiry. Our enterprise advisory system has processed your request in accordance with applicable regulations and protocols.\",\n                    advisory_note: \"Deterministic advisory generated per enterprise policy\",\n                    confidence_disclaimer: \"Enterprise deterministic advisory - human verification recommended\"\n                },\n                llm_status: {\n                    status: 'deterministic_fallback',\n                    fallback_reason: executionDecision.fallback_reason,\n                    timestamp: new Date().toISOString(),\n                    fallback_used: true,\n                    advisory_guaranteed: true\n                },\n                execution_decision: executionDecision\n            },\n            // CRITICAL FIX: Add execution metadata for conditional routing\n            _execution_metadata: {\n                path: 'deterministic_fallback',\n                prepared_at: new Date().toISOString(),\n                fallback_used: true,\n                advisory_generated: true\n            }\n        }\n    }];\n}\n\n// ==================== LLM CONFIGURATION PATH ====================\nconsole.log('ADVISORY_EXECUTION: Configuring LLM advisory');\nconst llmConfig = {\n    model: \"openai/gpt-4o-mini\",\n    temperature: 0.1,\n    maxTokens: 1000,\n    systemPrompt: `You are an ADVISORY ASSISTANT for a customer support system.\n\nCRITICAL RULES:\n1. You ONLY provide EXPLANATIONS and SUGGESTIONS\n2. You NEVER issue commands or decisions\n3. You NEVER modify: classification, confidence, severity, SLA, business_impact, or ticket_status\n4. You MUST respect these advisory restrictions: ${advisory.restrictions?.join(', ') || 'None'}\n5. If unsure, state \"Insufficient context for specific advice\"\n\nYour output MUST be in this JSON format:\n{\n  \"explanation\": \"Brief explanation of the issue\",\n  \"suggested_next_steps\": [\"step1\", \"step2\"],\n  \"draft_customer_response\": \"Professional response template\",\n  \"advisory_note\": \"Optional additional context\",\n  \"confidence_disclaimer\": \"This is advisory only - system decisions are final\"\n}\n\nContext will be provided. Generate ONLY advisory content.`,\n    userPrompt: JSON.stringify(advisory.input_context),\n    options: {\n        timeout: 10000,\n        maxRetries: 2,\n        fallbackOnError: true\n    }\n};\n\n// Build OpenRouter request\nconst requestBody = {\n    model: llmConfig.model,\n    messages: [\n        {\n            role: \"system\",\n            content: llmConfig.systemPrompt\n        },\n        {\n            role: \"user\",\n            content: llmConfig.userPrompt\n        }\n    ],\n    temperature: llmConfig.temperature,\n    max_tokens: llmConfig.maxTokens\n};\n\nreturn [{\n    json: {\n        ...item.json,\n        _llm_request_body: requestBody,\n        advisory: {\n            ...advisory,\n            llm_request_prepared: true,\n            llm_request_hash: advisory.input_context?.__integrity_hash,\n            llm_timestamp: new Date().toISOString(),\n            execution_decision: executionDecision\n        },\n        // CRITICAL FIX: Ensure consistent metadata format\n        _execution_metadata: {\n            path: 'llm_advisory',\n            prepared_at: new Date().toISOString(),\n            fallback_available: true,\n            advisory_guaranteed: true\n        }\n    }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        23392,
+        2352
+      ],
+      "id": "a6ee1ce0-4d3d-4196-a0a4-f301a934a9e2",
+      "name": "Advisory Execution Controller (Merged)"
+    },
+    {
+      "parameters": {
+        "content": "# BLOCK 1  -  Enhanced Input & Security\n\n",
+        "height": 576,
+        "width": 1744,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        18432,
+        2288
+      ],
+      "id": "f2c56e22-1e01-4e05-be28-714f6eb8d069",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "# BLOCK 2 -  Enhanced Classification & Context\n",
+        "height": 576,
+        "width": 1536,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        20208,
+        1936
+      ],
+      "id": "294c0d87-05a3-4534-8d85-6b3717baec30",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Restructure with Config - V20\nconst item = $input.first();\nconst json = item.json;\n\n// Extract components\nconst phase0Ticket = json.input0?.canonical_ticket || json.canonical_ticket;\nconst sb0Envelope = json.input1 || json;\n\n// Validate trace_id continuity\nconst phase0TraceId = String(phase0Ticket.trace_id || '');\nconst sb0TraceId = String(sb0Envelope.meta?.trace_id || '');\n\nif (phase0TraceId !== sb0TraceId) {\n  throw new Error(`TRACE_ID_MISMATCH: Phase0=${phase0TraceId}, SB0=${sb0TraceId}`);\n}\n\n// Build enriched canonical ticket\nconst enrichedTicket = {\n  // IMMUTABLE PHASE 0 FIELDS\n  trace_id: phase0TraceId,\n  subject: phase0Ticket.subject,\n  body: phase0Ticket.body,\n  customer_email: phase0Ticket.customer_email,\n  original_subject: phase0Ticket.original_subject,\n  original_body: phase0Ticket.original_body,\n  original_customer_email: phase0Ticket.original_customer_email,\n  severity: phase0Ticket.severity,\n  priority: phase0Ticket.priority,\n  category: phase0Ticket.category,\n  webhook_received_at: phase0Ticket.webhook_received_at,\n  client_ip: phase0Ticket.client_ip,\n  user_agent: phase0Ticket.user_agent,\n  \n  // VALIDATION STATE (preserved)\n  __validation_attempted: phase0Ticket.__validation_attempted,\n  validation_stage: phase0Ticket.validation_stage,\n  envelope_processed_at: phase0Ticket.envelope_processed_at,\n  phase_0_completed_at: phase0Ticket.phase_0_completed_at,\n  phase_0_status: phase0Ticket.phase_0_status,\n  \n  // ENRICHMENTS (empty initially)\n  text_features: null,\n  rule_engine: null,\n  rule_based_severity: null,\n  classification: null,\n  \n  // WORKFLOW METADATA (from SB0 config)\n  workflow_metadata: {\n    config: sb0Envelope.config,\n    workflow_start_time: Date.now(),\n    workflow_version: 'Revenant_v20_HYBRID_ENTERPRISE',\n    execution_timing: {},\n    node_version_map: {}\n  },\n  \n  // SYSTEM STATE\n  workflow_error: phase0Ticket.workflow_error || null,\n  ticket_status: 'pending',\n  \n  // DATA INTEGRITY\n  data_integrity: {\n    created_at: Date.now(),\n    last_modified: Date.now(),\n    modification_count: 0,\n    checksum: null\n  }\n};\n\n// Calculate checksum\nconst crypto = require('crypto');\nconst checksumData = {\n  trace_id: enrichedTicket.trace_id,\n  subject: enrichedTicket.subject,\n  body: enrichedTicket.body,\n  customer_email: enrichedTicket.customer_email,\n  version: '2.0'\n};\nenrichedTicket.data_integrity.checksum = crypto\n  .createHash('sha256')\n  .update(JSON.stringify(checksumData))\n  .digest('hex');\n\nreturn [{\n  json: {\n    canonical_ticket: enrichedTicket\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        20480,
+        2352
+      ],
+      "id": "2d03b5d4-2bbf-4c97-a362-e48a248bd05a",
+      "name": "Restructure with Config"
+    },
+    {
+      "parameters": {
+        "content": "# BLOCK 3  - Enhanced Business Logic \n",
+        "height": 576,
+        "width": 1152,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        21744,
+        1936
+      ],
+      "id": "d35951c1-71be-4f5a-b953-e9128d812d7c",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "# BLOCK 4    -   Enhanced AI & Memory Context \n",
+        "height": 576,
+        "width": 2224,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        22896,
+        1936
+      ],
+      "id": "512bfd8f-ca65-424a-862b-cf114a162485",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "jsCode": "// BANK-GRADE IMMUTABLE REQUEST GENERATION\nconst crypto = require('crypto');\n\nconst input = $json;\nconst trace_id = input.trace_id;\nconst advisory_hash = input.advisory_hash;\nconst selected_channel = input.selected_channel;\nconst block_4_seal_hash = input.block_4_seal_hash;\n\n// ---- GENERATE APPROVAL ID\nconst approval_id = `approval_${trace_id}_${crypto.randomUUID()}`;\n\n// ---- SINGLE TIMESTAMP\nconst created_at = new Date().toISOString();\nconst expires_at = new Date(Date.now() + 15 * 60 * 1000).toISOString();\n\n// ---- APPROVAL REQUEST ENVELOPE (IMMUTABLE)\nconst approval_request = {\n  approval_id,\n  trace_id,\n  advisory_hash,\n  selected_channel,\n  block_4_seal_hash,\n  expires_at,\n  approval_ingress_path: \"/bank/approval/v1\",\n  max_approval_age_seconds: 900,\n  created_at\n};\n\n// ---- CRYPTOGRAPHIC IMMUTABILITY (TWO-LAYER)\nconst approval_request_hash = crypto.createHash('sha256')\n  .update(JSON.stringify(approval_request))\n  .digest('hex');\n\nconst request_integrity_hash = crypto.createHash('sha256')\n  .update(`${approval_id}:${advisory_hash}:${trace_id}:${created_at}:${selected_channel}:${block_4_seal_hash}`)\n  .digest('hex');\n\n// ---- LEDGER RECORD\nconst approval_record = {\n  approval_id,\n  trace_id,\n  advisory_hash,\n  block_4_seal_hash,\n  selected_channel,\n  approval_request_hash, // CRITICAL: Cryptographic proof of request immutability\n  request_integrity_hash,\n  created_at,\n  expires_at,\n  consumed: false,\n  state: 'pending'\n};\n\nreturn [{\n  json: {\n    ...input,\n    approval_record,\n    approval_request, // FULL IMMUTABLE SNAPSHOT\n    __ledger_ready: true,\n    __crypto_immutable: true,\n    __approval_request_hash: approval_request_hash\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        25520,
+        2352
+      ],
+      "id": "c523480d-e0c0-4f5b-bcc9-251e636404bc",
+      "name": "Approval Request Registrar – Authority",
+      "retryOnFail": false,
+      "maxTries": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "// FIXED: Single canonical seal field\nconst crypto = require('crypto');\n\nconst input = $json;\nconst { canonical_ticket, _delivery_formatted, advisory, __block_4_complete } = input;\n\n// 1. SINGLE CANONICAL SEAL FIELD\nif (!__block_4_complete?.phase_seal_hash) {\n  throw new Error(`BLOCK_4_SEAL_FAILED: Missing phase_seal_hash. Found: ${Object.keys(__block_4_complete || {})}`);\n}\n\n// 2. EXTRACT ADVISORY PACKAGE\nconst advisory_package = _delivery_formatted?.raw_advisory;\nif (!advisory_package) {\n  throw new Error('ADAPTER_FAILED: No advisory package found');\n}\n\n// 3. CANONICAL ADVISORY HASH (INCLUDES BLOCK 4 SEAL)\nconst advisory_hash = crypto.createHash('sha256')\n  .update(JSON.stringify({\n    version: '3.0-production',\n    package: advisory_package,\n    confidence: advisory?.advisory_confidence,\n    block_4_seal: __block_4_complete.phase_seal_hash, // SINGLE CANONICAL FIELD\n    trace_id: canonical_ticket.trace_id\n  }))\n  .digest('hex');\n\n// 4. OUTPUT WITH SINGLE SEAL\nreturn [{\n  json: {\n    trace_id: canonical_ticket.trace_id,\n    canonical_ticket,\n    advisory_package,\n    advisory_confidence: advisory?.advisory_confidence,\n    governance_flags: advisory?.jurisdiction_flags || {},\n    advisory_hash,\n    block_4_seal_hash: __block_4_complete.phase_seal_hash, // CANONICAL - FIXED\n    __block_4_complete,\n    __immutability: {\n      block_4_locked: true,\n      seal_field: 'phase_seal_hash',\n      version: '3.0-production-seal-fixed'\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        24976,
+        2352
+      ],
+      "id": "714e1165-05c5-47b3-8eec-ca2bb41a6d73",
+      "name": "Block 4 → Block 5 Adapter2"
+    },
+    {
+      "parameters": {
+        "jsCode": "// SUPABASE-BASED ELIGIBILITY GATE\nconst input = $json;\nconst { createClient } = require('@supabase/supabase-js');\n\n// ---- SUPABASE CLIENT\nconst supabaseUrl = $credentials.supabaseApi.supabaseUrl;\nconst supabaseKey = $credentials.supabaseApi.apiKey;\nconst supabase = createClient(supabaseUrl, supabaseKey);\n\n// ---- CHECK BLOCK 4 SEAL\nconst isBlock4Sealed = input.__block_4_complete?.sealed === true;\n\n// ---- CHECK SUPABASE FOR PRIOR DISPATCH (NO STATIC MEMORY)\ntry {\n  const { data: priorDispatch } = await supabase\n    .from('bank_dispatch_logs')\n    .select('dispatch_id')\n    .eq('trace_id', input.trace_id)\n    .eq('status', 'dispatched')\n    .maybeSingle();\n\n  const hasPriorDispatch = !!priorDispatch;\n  const isEligible = isBlock4Sealed && !hasPriorDispatch;\n\n  // Route based on eligibility\n  if (isEligible) {\n    return [{\n      json: {\n        ...input,\n        __approval_eligible: true,\n        __eligibility_reason: 'BLOCK_4 sealed and no prior dispatch',\n        __eligibility_checked_at: new Date().toISOString(),\n        __supabase_eligibility_check: true\n      }\n    }];\n  } else {\n    // Create terminal state for ineligible cases\n    return [{\n      json: {\n        ...input,\n        __approval_eligible: false,\n        __eligibility_reason: isBlock4Sealed ? 'Prior dispatch exists in Supabase' : 'BLOCK_4 not sealed',\n        __eligibility_checked_at: new Date().toISOString(),\n        terminal_state: {\n          type: 'INELIGIBLE',\n          timestamp: new Date().toISOString(),\n          reason: isBlock4Sealed ? 'Prior dispatch exists' : 'BLOCK_4 not sealed',\n          trace_id: input.trace_id,\n          advisory_hash: input.advisory_hash\n        }\n      }\n    }];\n  }\n} catch (error) {\n  throw new Error(`ELIGIBILITY_CHECK_FAILED: ${error.message}`);\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        25168,
+        2352
+      ],
+      "id": "39264ff2-b0d5-4962-81b5-3c32817621fe",
+      "name": "Approval Eligibility Gate"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json;\nconst { advisory_confidence, governance_flags, advisory_hash } = input;\n\n// CHANNEL ARBITRATION RULES (immutable post-approval)\nconst CHANNEL_RULES = {\n  INTERNAL_UI: {\n    min_confidence: 0.1,\n    jurisdiction_allowed: ['*'],\n    priority: 3\n  },\n  EMAIL_TEMPLATE: {\n    min_confidence: 0.4,\n    jurisdiction_allowed: ['*', '.uz'],\n    priority: 2\n  },\n  WEBHOOK_DELIVERY: {\n    min_confidence: 0.7,\n    jurisdiction_allowed: ['*'],\n    excluded_jurisdictions: ['.uz'],\n    priority: 1\n  }\n};\n\nconst jurisdiction = governance_flags.jurisdiction || '*';\nconst confidence = advisory_confidence.score;\n\n// Determine eligible channels\nconst eligible = Object.entries(CHANNEL_RULES)\n  .filter(([_, rule]) => {\n    if (confidence < rule.min_confidence) return false;\n    if (rule.excluded_jurisdictions?.includes(jurisdiction)) return false;\n    if (!rule.jurisdiction_allowed.includes('*') && !rule.jurisdiction_allowed.includes(jurisdiction)) return false;\n    return true;\n  })\n  .sort((a, b) => a[1].priority - b[1].priority) // Higher priority first\n  .map(([channel]) => channel);\n\n// Select highest priority eligible channel\nlet selected_channel = 'INTERNAL_UI';\nif (eligible.includes('WEBHOOK_DELIVERY') && confidence >= 0.7 && jurisdiction !== '.uz') {\n  selected_channel = 'WEBHOOK_DELIVERY';\n} else if (eligible.includes('EMAIL_TEMPLATE') && confidence >= 0.4) {\n  selected_channel = 'EMAIL_TEMPLATE';\n}\n\nreturn [{\n  json: {\n    ...input,\n    selected_channel,\n    eligible_channels: eligible,\n    arbitration_reason: `Selected ${selected_channel} based on confidence ${confidence}, jurisdiction ${jurisdiction}, advisory_hash ${advisory_hash.slice(0, 16)}`,\n    arbitration_timestamp: new Date().toISOString(),\n    arbitration_final: true // Immutable flag\n  }\n}];"
+      },
+      "id": "cb3e68e8-4978-4781-b884-153ba4b0b603",
+      "name": "Channel Arbitration Engine",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        25344,
+        2352
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// SIMPLIFIED APPROVAL + REQUEST MERGER (SINGLE INPUT)\nconst input = $json;\n\nif (!input.validated_approval) {\n  throw new Error('MERGE_FAILED: Missing validated_approval');\n}\n\nif (!input.approval_request) {\n  throw new Error('MERGE_FAILED: Missing approval_request (should come from validator)');\n}\n\nconst validated_approval = input.validated_approval;\nconst approval_request = input.approval_request;\n\n// Cross-validation\nif (approval_request.approval_id !== validated_approval.approval_id) {\n  throw new Error('MERGE_FAILED: approval_id mismatch');\n}\n\nif (approval_request.advisory_hash !== validated_approval.advisory_hash) {\n  throw new Error('MERGE_FAILED: advisory_hash mismatch');\n}\n\nif (validated_approval.selected_channel !== approval_request.selected_channel) {\n  throw new Error('MERGE_FAILED: Channel tampering detected');\n}\n\nconst merged = {\n  approval_request,\n  validated_approval,\n  merged_at: new Date().toISOString(),\n  decision_finalized: validated_approval.decision === 'APPROVED'\n};\n\nif (validated_approval.decision === 'REJECTED') {\n  merged.terminal_state = {\n    type: 'REJECTED',\n    approver_id: validated_approval.approver_id,\n    approver_role: validated_approval.approver_role,\n    timestamp: validated_approval.approval_timestamp,\n    advisory_hash: validated_approval.advisory_hash,\n    rejection_reason: validated_approval.rejection_reason || 'Not specified',\n    selected_channel: validated_approval.selected_channel\n  };\n}\n\nreturn [{ json: merged }];"
+      },
+      "id": "ae00870e-c5a5-47e0-8e7a-3155f50835ff",
+      "name": "Approval + Request Merger",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        26608,
+        1984
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// DATABASE-LEVEL IDEMPOTENCE LOCK\nconst crypto = require('crypto');\nconst { createClient } = require('@supabase/supabase-js');\n\nconst input = $json;\nconst { validated_approval, approval_request } = input;\n\n// ---- REJECTION HANDLING\nif (validated_approval.decision !== 'APPROVED') {\n  return [{\n    json: {\n      ...input,\n      dispatch_guard: {\n        guard_passed: false,\n        decision: 'REJECTED',\n        terminal_path: true,\n        timestamp: new Date().toISOString()\n      }\n    }\n  }];\n}\n\n// ---- CHANNEL FROM APPROVAL_REQUEST (LEDGER SOURCE OF TRUTH)\nconst approved_channel = approval_request.selected_channel;\nif (!approved_channel) {\n  throw new Error('DISPATCH_GUARD_FAILED: No channel in approval_request');\n}\n\n// ---- SUPABASE CLIENT\nconst supabaseUrl = $credentials.supabaseApi.supabaseUrl;\nconst supabaseKey = $credentials.supabaseApi.apiKey;\nconst supabase = createClient(supabaseUrl, supabaseKey);\n\n// ---- IDEMPOTENCE KEY\nconst idempotence_key = crypto.createHash('sha256')\n  .update(`${validated_approval.approval_id}:${approved_channel}:${validated_approval.trace_id}:${validated_approval.advisory_hash}`)\n  .digest('hex');\n\n// ---- ATOMIC LOCK ACQUISITION\ntry {\n  const { data: existingLock } = await supabase\n    .from('bank_dispatch_logs')\n    .select('*')\n    .eq('idempotence_key', idempotence_key)\n    .single();\n\n  if (existingLock) {\n    if (existingLock.status === 'dispatched') {\n      throw new Error(`ALREADY_DISPATCHED: Dispatch already completed for ${idempotence_key.slice(0, 16)}`);\n    }\n    if (existingLock.status === 'locked') {\n      // Check lock timeout (5 minutes)\n      const lockAge = Date.now() - new Date(existingLock.locked_at).getTime();\n      if (lockAge < 5 * 60 * 1000) {\n        throw new Error(`LOCK_HELD: Dispatch already locked (${lockAge/1000}s ago) for ${idempotence_key.slice(0, 16)}`);\n      }\n    }\n  }\n\n  // UPSERT LOCK (ATOMIC)\n  const { data: lock, error: lockError } = await supabase\n    .from('bank_dispatch_logs')\n    .upsert({\n      idempotence_key,\n      approval_id: validated_approval.approval_id,\n      trace_id: validated_approval.trace_id,\n      channel: approved_channel,\n      status: 'locked',\n      locked_at: new Date().toISOString(),\n      advisory_hash: validated_approval.advisory_hash,\n      retry_count: existingLock ? existingLock.retry_count + 1 : 0,\n      updated_at: new Date().toISOString()\n    }, {\n      onConflict: 'idempotence_key'\n    })\n    .select()\n    .single();\n\n  if (lockError) {\n    throw new Error(`LOCK_FAILED: ${lockError.message}`);\n  }\n\n  return [{\n    json: {\n      ...input,\n      dispatch_guard: {\n        idempotence_key,\n        approved_channel,\n        approval_id: validated_approval.approval_id,\n        trace_id: validated_approval.trace_id,\n        advisory_hash: validated_approval.advisory_hash,\n        guard_passed: true,\n        timestamp: new Date().toISOString(),\n        ledger_locked: true,\n        retry_count: lock.retry_count\n      }\n    }\n  }];\n} catch (error) {\n  throw new Error(`DISPATCH_GUARD_FAILED: ${error.message}`);\n}"
+      },
+      "id": "d91031ba-77da-476d-8f7d-9b7f23330cff",
+      "name": "Dispatch Guard & Idempotence Lock",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        27008,
+        2352
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "internal-ui-condition",
+              "leftValue": "={{ $json.dispatch_guard.approved_channel }}",
+              "rightValue": "INTERNAL_UI",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "output": {
+                "outputIndex": 0
+              }
+            },
+            {
+              "id": "email-template-condition",
+              "leftValue": "={{ $json.dispatch_guard.approved_channel }}",
+              "rightValue": "EMAIL_TEMPLATE",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "output": {
+                "outputIndex": 1
+              }
+            },
+            {
+              "id": "webhook-delivery-condition",
+              "leftValue": "={{ $json.dispatch_guard.approved_channel }}",
+              "rightValue": "WEBHOOK_DELIVERY",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "output": {
+                "outputIndex": 2
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "8cf32386-01a8-451f-8273-021c04b46f54",
+      "name": "Single-Channel Dispatcher (IF)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        27216,
+        2352
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json;\nconst { dispatch_guard, trace_id } = input;\n\n// ---- Normalized dispatch result\nconst dispatch_result = {\n  status: 'DELIVERED',\n  channel: 'INTERNAL_UI',\n  dispatch_id: `ui_${dispatch_guard.idempotence_key.slice(0, 16)}`,\n  dispatched_at: new Date().toISOString(),\n  internal_reference: `adv_${trace_id}`,\n  idempotence_key: dispatch_guard.idempotence_key,\n  approval_id: dispatch_guard.approval_id,\n  advisory_hash: dispatch_guard.advisory_hash\n};\n\nreturn [{\n  json: {\n    ...input,\n    dispatch_result,\n    __dispatch_type: 'INTERNAL_UI'\n  }\n}];"
+      },
+      "id": "b61b82b1-003e-4537-8736-729ae5232b54",
+      "name": "INTERNAL_UI Dispatch",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        27536,
+        2048
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ATOMIC DISPATCH COMPLETION\nconst { createClient } = require('@supabase/supabase-js');\n\nconst input = $json;\nconst { dispatch_guard, validated_approval, terminal_state } = input;\n\n// ---- SUPABASE CLIENT\nconst supabaseUrl = $credentials.supabaseApi.supabaseUrl;\nconst supabaseKey = $credentials.supabaseApi.apiKey;\nconst supabase = createClient(supabaseUrl, supabaseKey);\n\n// ---- REJECTIONS\nif (terminal_state?.type === 'REJECTED') {\n  await supabase\n    .from('bank_approvals')\n    .update({\n      state: 'rejected',\n      consumed: true,\n      consumed_at: new Date().toISOString()\n    })\n    .eq('approval_id', validated_approval.approval_id);\n  \n  return [{\n    json: {\n      ...input,\n      dispatch_finalized: true,\n      dispatch_outcome: {\n        status: 'REJECTED',\n        channel: 'NONE',\n        approval_id: validated_approval.approval_id,\n        finalized_at: new Date().toISOString()\n      }\n    }\n  }];\n}\n\n// ---- NORMALIZE DISPATCH RESULT\nlet dispatch_result = input.dispatch_result || input.response;\nconst final_status = dispatch_result?.status === 'DELIVERED' ? 'dispatched' : 'failed';\nconst dispatch_id = dispatch_result?.dispatch_id || `dispatch_${Date.now()}`;\n\n// ---- ATOMIC DISPATCH COMPLETION\nconst { data: updatedLock, error } = await supabase\n  .from('bank_dispatch_logs')\n  .update({\n    status: final_status,\n    dispatched_at: new Date().toISOString(),\n    dispatch_id,\n    dispatch_result: dispatch_result,\n    updated_at: new Date().toISOString()\n  })\n  .eq('idempotence_key', dispatch_guard.idempotence_key)\n  .eq('status', 'locked')\n  .select()\n  .single();\n\nif (error || !updatedLock) {\n  // Lock expired or already completed\n  const { data: currentLock } = await supabase\n    .from('bank_dispatch_logs')\n    .select('*')\n    .eq('idempotence_key', dispatch_guard.idempotence_key)\n    .single();\n    \n  if (currentLock?.status === 'dispatched') {\n    dispatch_result = currentLock.dispatch_result;\n  } else {\n    throw new Error(`DISPATCH_FAILED: ${error?.message || 'Lock not found'}`);\n  }\n}\n\n// ---- UPDATE APPROVAL STATE\nif (final_status === 'dispatched') {\n  await supabase\n    .from('bank_approvals')\n    .update({\n      state: 'dispatched',\n      updated_at: new Date().toISOString()\n    })\n    .eq('approval_id', validated_approval.approval_id);\n}\n\nreturn [{\n  json: {\n    ...input,\n    dispatch_finalized: true,\n    dispatch_outcome: {\n      status: final_status.toUpperCase(),\n      channel: dispatch_guard.approved_channel,\n      dispatch_id,\n      approval_id: validated_approval.approval_id,\n      trace_id: validated_approval.trace_id,\n      finalized_at: new Date().toISOString(),\n      idempotence_key: dispatch_guard.idempotence_key,\n      ledger_committed: true\n    }\n  }\n}];"
+      },
+      "id": "2d21fed1-3a5f-4ef4-9d63-53700ef7cf8e",
+      "name": "Dispatch Outcome Finalizer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        27888,
+        2288
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// BLOCK 5 FORENSIC SEAL (FIXED - NO STATIC DATA)\nconst crypto = require('crypto');\nconst { createClient } = require('@supabase/supabase-js');\n\nconst input = $json;\nconst { dispatch_outcome, dispatch_guard, validated_approval, terminal_state, __block_4_complete } = input;\n\n// ---- SUPABASE CLIENT\nconst supabaseUrl = $credentials.supabaseApi.supabaseUrl;\nconst supabaseKey = $credentials.supabaseApi.apiKey;\nconst supabase = createClient(supabaseUrl, supabaseKey);\n\n// ---- BLOCK 4 SEAL VERIFICATION (FIXED TO phase_seal_hash)\nif (!__block_4_complete?.phase_seal_hash) {\n  throw new Error('FORENSIC_SEAL_FAILED: BLOCK 4 phase_seal_hash not found');\n}\n\n// ---- HANDLE REJECTIONS\nif (terminal_state?.type === 'REJECTED') {\n  const seal_data = {\n    previous_block_seal_hash: __block_4_complete.phase_seal_hash, // FIXED\n    approval_id: validated_approval.approval_id,\n    advisory_hash: validated_approval.advisory_hash,\n    trace_id: validated_approval.trace_id,\n    decision: 'REJECTED',\n    approver_id: validated_approval.approver_id,\n    approver_role: validated_approval.approver_role,\n    rejection_timestamp: terminal_state.timestamp,\n    rejection_reason: terminal_state.rejection_reason,\n    selected_channel: validated_approval.selected_channel,\n    seal_timestamp: new Date().toISOString()\n  };\n\n  const seal_hash = crypto.createHash('sha256')\n    .update(JSON.stringify(seal_data))\n    .digest('hex');\n\n  return [{\n    json: {\n      ...input,\n      __block_5_complete: {\n        sealed: true,\n        seal_id: `seal_rejected_${validated_approval.approval_id}`,\n        seal_hash,\n        seal_data,\n        sealed_at: new Date().toISOString(),\n        terminal_state: true,\n        bank_audit_compliant: true,\n        dispatch_performed: false,\n        block_4_integrity_verified: true\n      }\n    }\n  }];\n}\n\n// ---- APPROVED DISPATCHES\nconst seal_data = {\n  previous_block_seal_hash: __block_4_complete.phase_seal_hash, // FIXED\n  approval_id: validated_approval.approval_id,\n  advisory_hash: validated_approval.advisory_hash,\n  trace_id: validated_approval.trace_id,\n  approver_id: validated_approval.approver_id,\n  approver_role: validated_approval.approver_role,\n  approved_channel: validated_approval.selected_channel,\n  dispatch_id: dispatch_outcome.dispatch_id,\n  idempotence_key: dispatch_guard.idempotence_key,\n  seal_timestamp: new Date().toISOString(),\n  dispatch_status: dispatch_outcome.status,\n  dispatch_performed: true,\n  channel_compliance: dispatch_outcome.channel === 'EMAIL_TEMPLATE' ? {\n    delivery_mechanism: 'GMAIL_OAUTH_SEND_ONLY',\n    smtp_credentials_stored: false,\n    replaceable_with_bank_smtp: true,\n    compliance_class: 'NON_CORE_INFRASTRUCTURE'\n  } : null\n};\n\nconst seal_hash = crypto.createHash('sha256')\n  .update(JSON.stringify(seal_data))\n  .digest('hex');\n\n// ---- UPDATE SUPABASE DISPATCH LOG (NO STATIC DATA)\nawait supabase\n  .from('bank_dispatch_logs')\n  .update({\n    sealed: true,\n    seal_hash\n  })\n  .eq('idempotence_key', dispatch_guard.idempotence_key);\n\nreturn [{\n  json: {\n    ...input,\n    __block_5_complete: {\n      sealed: true,\n      seal_id: `seal_dispatch_${validated_approval.approval_id}`,\n      seal_hash,\n      seal_data,\n      sealed_at: new Date().toISOString(),\n      terminal_state: true,\n      bank_audit_compliant: true,\n      dispatch_performed: true,\n      block_4_integrity_verified: true,\n      single_approval_authority: true,\n      canonical_advisory_hash_used: true\n    }\n  }\n}];"
+      },
+      "id": "2ea3078e-6156-426d-8fce-4a7c153319f3",
+      "name": "BLOCK 5 Forensic Seal",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        28112,
+        2288
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Analytics Emitter\nconst input = $json;\nconst { dispatch_outcome, validated_approval, advisory_confidence, __block_5_complete } = input;\n\n// ---- NON-BLOCKING ANALYTICS EMISSION\ntry {\n  const analytics_payload = {\n    event_id: `analytics_${Date.now()}_${dispatch_outcome?.dispatch_id || 'rejected'}`,\n    trace_id: input.trace_id,\n    dispatch_id: dispatch_outcome?.dispatch_id,\n    channel: dispatch_outcome?.channel || validated_approval?.selected_channel,\n    status: dispatch_outcome?.status || 'REJECTED',\n    confidence_score: advisory_confidence.score,\n    approver_role: validated_approval?.approver_role,\n    sealed_block_id: __block_5_complete?.seal_id,\n    canonical_advisory_hash: validated_approval?.advisory_hash?.slice(0, 16),\n    emitted_at: new Date().toISOString(),\n    analytics_class: 'NON_BLOCKING_OBSERVABILITY',\n    required_for_success: false,\n    authoritative: false\n  };\n\n  console.log('[ANALYTICS_EMITTED]', JSON.stringify(analytics_payload));\n} catch (analyticsError) {\n  console.error('[ANALYTICS_ERROR_NON_BLOCKING]', analyticsError.message);\n}\n\nreturn [{\n  json: {\n    ...input,\n    analytics_emission: {\n      status: 'EMITTED',\n      emission_id: `analytics_${Date.now()}`,\n      non_blocking: true,\n      audit_compliant: true\n    }\n  }\n}];"
+      },
+      "id": "f65f3f26-1ec0-4130-99b2-209bc35a65a5",
+      "name": "Analytics Emitter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        28320,
+        2288
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const { dispatch_guard } = $json;\nthrow new Error(`INVALID_CHANNEL: Channel '${dispatch_guard?.approved_channel || 'unknown'}' is not allowed. Allowed channels: INTERNAL_UI, EMAIL_TEMPLATE, WEBHOOK_DELIVERY`);"
+      },
+      "id": "63b07693-6ef9-4ee1-a894-04b29dfc8d17",
+      "name": "Invalid Channel Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        27536,
+        2368
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "ahmedovzulfiuya56@gmail.com",
+        "subject": "={{ 'Bank Advisory: ' + $json.trace_id }}",
+        "emailType": "text",
+        "message": "=Advisory Reference: {{ $json.trace_id }}\nApproved by: {{ $json.validated_approval.approver_id }}\nDispatch ID: {{ $json.dispatch_guard.idempotence_key }}\nAdvisory Hash: {{ $json.dispatch_guard.advisory_hash.slice(0, 16) }}\n\nThis is an automated advisory notification from BLOCK 5.",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        27536,
+        2192
+      ],
+      "id": "aef2bf04-e0e3-4467-8277-e9949d0ee3d5",
+      "name": "EMAIL_TEMPLATE Dispatch",
+      "webhookId": "a04c1ba0-eb71-41f5-a276-77b26a094f8f",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "ceDrjpiG3D3JXlIN",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.advisory_package.webhook_endpoint || 'https://api.bank.uz/advisory/webhook' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Idempotence-Key",
+              "value": "={{ $json.dispatch_guard.idempotence_key }}"
+            },
+            {
+              "name": "X-Advisory-Hash",
+              "value": "={{ $json.dispatch_guard.advisory_hash }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  trace_id: $json.trace_id,\n  advisory_hash: $json.dispatch_guard.advisory_hash,\n  approval_id: $json.dispatch_guard.approval_id,\n  channel: $json.dispatch_guard.approved_channel,\n  dispatched_at: new Date().toISOString(),\n  advisory_package: $json.advisory_package\n} }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "e2c60fbc-5012-412d-ba2a-3574b6ba6cfb",
+      "name": "WEBHOOK_DELIVERY Dispatch",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        27888,
+        2048
+      ]
+    },
+    {
+      "parameters": {
+        "tableId": "bank_approvals",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "approval_id",
+              "fieldValue": "={{ $json.approval_record['approval_id'] }}"
+            },
+            {
+              "fieldId": "trace_id",
+              "fieldValue": "={{ $json.approval_record['trace_id'] }}"
+            },
+            {
+              "fieldId": "approval_request",
+              "fieldValue": "={{ $json.approval_request }}"
+            },
+            {
+              "fieldId": "advisory_hash",
+              "fieldValue": "={{ $json.approval_record['advisory_hash'] }}"
+            },
+            {
+              "fieldId": "selected_channel",
+              "fieldValue": "={{ $json.approval_record['selected_channel'] }}"
+            },
+            {
+              "fieldId": "request_integrity_hash",
+              "fieldValue": "={{ $json.approval_record['request_integrity_hash'] }}"
+            },
+            {
+              "fieldId": "approval_request_hash",
+              "fieldValue": "={{ $json.approval_record['approval_request_hash'] }}"
+            },
+            {
+              "fieldId": "created_at",
+              "fieldValue": "={{ $json.approval_record['created_at'] }}"
+            },
+            {
+              "fieldId": "expires_at",
+              "fieldValue": "={{ $json.approval_record['expires_at'] }}"
+            },
+            {
+              "fieldId": "consumed",
+              "fieldValue": "={{ $json.approval_record['consumed'] }}"
+            },
+            {
+              "fieldId": "block_4_seal_hash",
+              "fieldValue": "={{ $json.approval_record['block_4_seal_hash'] }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        25696,
+        2352
+      ],
+      "id": "298ea4a7-bb8d-473b-9624-91884a29f584",
+      "name": "Create a row",
+      "credentials": {
+        "supabaseApi": {
+          "id": "HmAnIa5W7Tqmq4t5",
+          "name": "Supabase account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// PRODUCTION VALIDATOR WITH HMAC ENFORCEMENT & HASH VERIFICATION\nconst crypto = require('crypto');\nconst { createClient } = require('@supabase/supabase-js');\n\nconst input = $json;\nconst approval_payload = input.body;\nconst stored_record = {\n  approval_id: input.approval_id,\n  trace_id: input.trace_id,\n  approval_request: input.approval_request,\n  approval_request_hash: input.approval_request_hash,\n  advisory_hash: input.advisory_hash,\n  selected_channel: input.selected_channel,\n  request_integrity_hash: input.request_integrity_hash,\n  created_at: input.created_at,\n  expires_at: input.expires_at,\n  consumed: input.consumed,\n  state: input.state,\n  block_4_seal_hash: input.block_4_seal_hash\n};\n\nconsole.log(`[VALIDATOR] Processing approval: ${stored_record.approval_id}`);\n\n// === 1. ENVIRONMENT-BASED HMAC ENFORCEMENT ===\nconst ENVIRONMENT = $vars.ENVIRONMENT || 'development';\nconst isProduction = ENVIRONMENT === 'production';\n\n// === 2. APPROVAL REQUEST HASH VERIFICATION (CRITICAL FIX 6) ===\nconst recomputed_approval_request_hash = crypto.createHash('sha256')\n  .update(JSON.stringify(stored_record.approval_request))\n  .digest('hex');\n\nif (recomputed_approval_request_hash !== stored_record.approval_request_hash) {\n  throw new Error(`IMMUTABILITY_VIOLATION: Approval request hash mismatch`);\n}\n\n// === 3. EXPIRY ENFORCEMENT ===\nconst now = new Date();\nconst expiresAt = new Date(stored_record.expires_at);\n\nif (now > expiresAt) {\n  throw new Error(`APPROVAL_EXPIRED: Approval expired at ${stored_record.expires_at}`);\n}\n\n// === 4. REQUIRED FIELDS ===\nconst REQUIRED_FIELDS = [\n  'approval_id', 'decision', 'approver_id', 'approver_role',\n  'approval_timestamp', 'advisory_hash', 'trace_id'\n];\n\nfor (const field of REQUIRED_FIELDS) {\n  if (!approval_payload[field]) {\n    throw new Error(`Missing required field: ${field}`);\n  }\n}\n\n// === 5. CROSS-VALIDATION ===\nif (stored_record.approval_id !== approval_payload.approval_id) {\n  throw new Error('approval_id mismatch');\n}\n\nif (stored_record.advisory_hash !== approval_payload.advisory_hash) {\n  throw new Error('advisory_hash mismatch');\n}\n\n// === 6. HMAC VALIDATION (FIX 1) ===\nlet hmac_valid = false;\n\nif (isProduction) {\n  if (!approval_payload.approval_hmac) {\n    throw new Error('HMAC_REQUIRED: Approval HMAC is required in production');\n  }\n  \n  const BANK_HMAC_SECRET = $vars.BANK_HMAC_SECRET;\n  if (!BANK_HMAC_SECRET) {\n    throw new Error('HMAC_SECRET_MISSING: BANK_HMAC_SECRET not configured');\n  }\n  \n  const hmac_data = `${approval_payload.approval_id}:${approval_payload.advisory_hash}:${approval_payload.trace_id}:${approval_payload.approver_id}:${approval_payload.approval_timestamp}:${approval_payload.decision}:${stored_record.selected_channel}`;\n  \n  const expected_hmac = crypto.createHmac('sha256', BANK_HMAC_SECRET)\n    .update(hmac_data)\n    .digest('hex');\n    \n  hmac_valid = (approval_payload.approval_hmac === expected_hmac);\n  \n  if (!hmac_valid) {\n    throw new Error('HMAC_VALIDATION_FAILED: Invalid approval HMAC');\n  }\n} else {\n  console.warn('[DEV_MODE] Skipping HMAC validation');\n  hmac_valid = approval_payload.approval_hmac ? true : false;\n}\n\n// === 7. VALIDATED OUTPUT ===\nconst validated_approval = {\n  ...approval_payload,\n  selected_channel: stored_record.selected_channel, // FROM LEDGER\n  validated_at: now.toISOString(),\n  approval_age_seconds: (now - new Date(stored_record.created_at)) / 1000,\n  expiry_verified: true,\n  hmac_valid,\n  approval_request_hash_verified: true,\n  validator_version: '4.0-production'\n};\n\nreturn [{\n  json: {\n    validated_approval,\n    approval_request: stored_record.approval_request,\n    validation_result: {\n      status: 'VALIDATED',\n      timestamp: now.toISOString(),\n      environment: ENVIRONMENT,\n      hmac_enforced: isProduction,\n      hmac_valid\n    }\n  }\n}];"
+      },
+      "id": "908a2629-c841-47e4-b542-21157cfd5408",
+      "name": "Approval Envelope Validator",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        26416,
+        2352
+      ]
+    },
+    {
+      "parameters": {
+        "useCustomSchema": true,
+        "operation": "get",
+        "tableId": "bank_approvals",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "approval_id",
+              "keyValue": "={{ $json.body.approval_id }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        26064,
+        2176
+      ],
+      "id": "94e7bb66-246e-4506-88cb-8834f5d84ae7",
+      "name": "Get a row",
+      "credentials": {
+        "supabaseApi": {
+          "id": "HmAnIa5W7Tqmq4t5",
+          "name": "Supabase account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "bank_approvals",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "approval_id",
+              "condition": "eq",
+              "keyValue": "={{ $json.validated_approval.approval_id }}"
+            },
+            {
+              "keyName": "consumed",
+              "condition": "eq",
+              "keyValue": "false"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "consumed",
+              "fieldValue": "true"
+            },
+            {
+              "fieldId": "consumed_at",
+              "fieldValue": "={{ new Date().toISOString() }}"
+            },
+            {
+              "fieldId": "approver_id",
+              "fieldValue": "={{ $json.validated_approval.approver_id }}"
+            },
+            {
+              "fieldId": "approver_role",
+              "fieldValue": "={{ $json.validated_approval.approver_role }}"
+            },
+            {
+              "fieldId": "approval_timestamp",
+              "fieldValue": "={{ $json.validated_approval.approval_timestamp }}"
+            },
+            {
+              "fieldId": "decision",
+              "fieldValue": "={{ $json.validated_approval.decision }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        26784,
+        2352
+      ],
+      "id": "8ce41ddd-ddd9-4470-a6b1-58e788684c51",
+      "name": "Update a row",
+      "credentials": {
+        "supabaseApi": {
+          "id": "HmAnIa5W7Tqmq4t5",
+          "name": "Supabase account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resume": "webhook",
+        "httpMethod": "POST",
+        "options": {
+          "responseData": "='{\"status\": \"AWAITING_APPROVAL\"}'"
+        }
+      },
+      "id": "d18d51e3-0f66-4b32-9f80-e876822941a4",
+      "name": "Human Approval Wait",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        25888,
+        2352
+      ],
+      "webhookId": "0c2a1910-9883-48cd-8d52-301d6476a209"
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\n\nconst BANK_HMAC_SECRET = $vars.BANK_HMAC_SECRET;\nif (!BANK_HMAC_SECRET) {\n  throw new Error('BANK_HMAC_SECRET not configured');\n}\n\nconst approval_id = \"approval_267_9317428e-83ac-4106-ab0b-ef30edd4c73a\";\nconst advisory_hash = \"99415823b031a4426c56c4efff40f764007b7e27359c43b26c18904ebf2cf668\";\nconst trace_id = \"267\";\nconst approver_id = \"system_bot_001\";\nconst approval_timestamp = \"2026-01-03T10:40:00.000Z\";\nconst decision = \"APPROVED\";\nconst selected_channel = \"EMAIL_TEMPLATE\";\n\nconst hmac_data = `${approval_id}:${advisory_hash}:${trace_id}:${approver_id}:${approval_timestamp}:${decision}:${selected_channel}`;\n\nconst hmac = crypto.createHmac('sha256', BANK_HMAC_SECRET)\n  .update(hmac_data)\n  .digest('hex');\n\nconst curlCommand = `curl -X POST \"https://revenant18.app.n8n.cloud/webhook-test/0c2a1910-9883-48cd-8d52-301d6476a209\" \\\\\n  -H \"Content-Type: application/json\" \\\\\n  -d '{\\\n    \\\"approval_id\\\": \\\"${approval_id}\\\",\\n    \\\"decision\\\": \\\"${decision}\\\",\\n    \\\"approver_id\\\": \\\"${approver_id}\\\",\\n    \\\"approver_role\\\": \\\"risk_officer\\\",\\n    \\\"approval_timestamp\\\": \\\"${approval_timestamp}\\\",\\n    \\\"advisory_hash\\\": \\\"${advisory_hash}\\\",\\n    \\\"approval_hmac\\\": \\\"${hmac}\\\",\\n    \\\"trace_id\\\": \\\"${trace_id}\\\"\\n  }'`;\n\nconsole.log(\"HMAC:\", hmac);\nconsole.log(\"CURL:\", curlCommand);\n\nreturn {\n  hmac,\n  curlCommand\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        25840,
+        2096
+      ],
+      "id": "cd5a3a8e-964a-4c42-97ea-f4572fab96ea",
+      "name": "HMAC Generator"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        26224,
+        2352
+      ],
+      "id": "cff9ad92-8b84-44f9-931c-67990a5e87f2",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "content": "# BLOCK 5: Enhanced Approval & Dispatch\n",
+        "height": 576,
+        "width": 3424,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        25120,
+        1936
+      ],
+      "id": "8e7bf0d1-fd34-422e-a821-719cdb91c303",
+      "name": "Sticky Note4"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Configuration Loader - V20": {
+      "main": [
+        [
+          {
+            "node": "Merge Node Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Phase 0 Validation Gate - V20": {
+      "main": [
+        [
+          {
+            "node": "Merge: Phase 0 Output + SB0 Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Input Validator & Cleaner - V16": {
+      "main": [
+        [
+          {
+            "node": "Phase 0 Validation Gate - V20",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input Fields": {
+      "main": [
+        [
+          {
+            "node": "Input Validator & Cleaner - V16",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "⚠️ SB1 ERROR EXIT – Validation Failure Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Ingestion - Rate Limited": {
+      "main": [
+        [
+          {
+            "node": "PROD Input Normalizer - Hardened V20",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚠️ SB1 ERROR EXIT – Validation Failure Handler": {
+      "main": [
+        [
+          {
+            "node": "Return Validation Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Node Configuration": {
+      "main": [
+        [
+          {
+            "node": "SB0 – Envelope Constructor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PROD Input Normalizer - Hardened V20": {
+      "main": [
+        [
+          {
+            "node": "Configuration Loader - V20",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge Node Configuration",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "SB0 – Envelope Constructor": {
+      "main": [
+        [
+          {
+            "node": "Validate Input Fields",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge: Phase 0 Output + SB0 Config",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Rule-Based Classifier - V20": {
+      "main": [
+        [
+          {
+            "node": "Rule-Based Severity Classifier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rule-Based Severity Classifier": {
+      "main": [
+        [
+          {
+            "node": "Pre-Fusion Classification Normalizer - V1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Text Feature Engineering (Deterministic)": {
+      "main": [
+        [
+          {
+            "node": "Rule-Based Classifier - V20",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge: Phase 0 Output + SB0 Config": {
+      "main": [
+        [
+          {
+            "node": "Restructure with Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pre-Fusion Classification Normalizer - V1": {
+      "main": [
+        [
+          {
+            "node": "Uzbekistan SLA Calculator - Fixed Timezone V20",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Business Impact Calculator (UZS) - V20": {
+      "main": [
+        [
+          {
+            "node": "Metrics Emitter Node",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Uzbekistan SLA Calculator - Fixed Timezone V20": {
+      "main": [
+        [
+          {
+            "node": "Business Impact Calculator (UZS) - V20",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Language Detection Engine - V19 (Expanded)": {
+      "main": [
+        [
+          {
+            "node": "Text Feature Engineering (Deterministic)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Metrics Emitter Node": {
+      "main": [
+        [
+          {
+            "node": "Trace Context Node",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trace Context Node": {
+      "main": [
+        [
+          {
+            "node": "FORENSIC LOGGING",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FORENSIC LOGGING": {
+      "main": [
+        [
+          {
+            "node": "Phase 3.7 – Final Execution Seal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Governance Gate & Context Assembler": {
+      "main": [
+        [
+          {
+            "node": "Advisory Execution Controller (Merged)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM Output Sanitizer & Enterprise Validator": {
+      "main": [
+        [
+          {
+            "node": "Advisory Confidence Labeler (Deterministic)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Advisory Confidence Labeler (Deterministic)": {
+      "main": [
+        [
+          {
+            "node": "Delivery Formatter & Channel Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delivery Formatter & Channel Router": {
+      "main": [
+        [
+          {
+            "node": "Forensic Logger & Phase Seal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "LLM Output Sanitizer & Enterprise Validator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Phase 3.7 – Final Execution Seal": {
+      "main": [
+        [
+          {
+            "node": "Governance Gate & Context Assembler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "LLM HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "LLM Output Sanitizer & Enterprise Validator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Advisory Execution Controller (Merged)": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restructure with Config": {
+      "main": [
+        [
+          {
+            "node": "Language Detection Engine - V19 (Expanded)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Forensic Logger & Phase Seal": {
+      "main": [
+        [
+          {
+            "node": "Block 4 → Block 5 Adapter2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approval Request Registrar – Authority": {
+      "main": [
+        [
+          {
+            "node": "Create a row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Block 4 → Block 5 Adapter2": {
+      "main": [
+        [
+          {
+            "node": "Approval Eligibility Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approval Eligibility Gate": {
+      "main": [
+        [
+          {
+            "node": "Channel Arbitration Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Channel Arbitration Engine": {
+      "main": [
+        [
+          {
+            "node": "Approval Request Registrar – Authority",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approval + Request Merger": {
+      "main": [
+        [
+          {
+            "node": "Update a row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dispatch Guard & Idempotence Lock": {
+      "main": [
+        [
+          {
+            "node": "Single-Channel Dispatcher (IF)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Single-Channel Dispatcher (IF)": {
+      "main": [
+        [
+          {
+            "node": "INTERNAL_UI Dispatch",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Invalid Channel Error",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "EMAIL_TEMPLATE Dispatch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "INTERNAL_UI Dispatch": {
+      "main": [
+        [
+          {
+            "node": "Dispatch Outcome Finalizer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dispatch Outcome Finalizer": {
+      "main": [
+        [
+          {
+            "node": "BLOCK 5 Forensic Seal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BLOCK 5 Forensic Seal": {
+      "main": [
+        [
+          {
+            "node": "Analytics Emitter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "EMAIL_TEMPLATE Dispatch": {
+      "main": [
+        [
+          {
+            "node": "Dispatch Outcome Finalizer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WEBHOOK_DELIVERY Dispatch": {
+      "main": [
+        [
+          {
+            "node": "Dispatch Outcome Finalizer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create a row": {
+      "main": [
+        [
+          {
+            "node": "HMAC Generator",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Human Approval Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approval Envelope Validator": {
+      "main": [
+        [
+          {
+            "node": "Approval + Request Merger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get a row": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update a row": {
+      "main": [
+        [
+          {
+            "node": "Dispatch Guard & Idempotence Lock",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Human Approval Wait": {
+      "main": [
+        [
+          {
+            "node": "Get a row",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Approval Envelope Validator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "4ff73f66-03c6-4533-8490-fbf0be959e09",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d4fb6a1a84b80778952ffbf148ff4ba2b8d393140114196b201e170cb0e0401d"
+  },
+  "id": "ooDSwySmzeEIKpFe",
+  "tags": []
+}

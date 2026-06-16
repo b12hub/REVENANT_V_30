@@ -1,0 +1,12 @@
+/home/bobur/Revenant/revenant-engine/target/debug/deps/signature-edea55a3878e514b.d: /home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-2.2.0/src/lib.rs /home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-2.2.0/src/hazmat.rs /home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-2.2.0/src/encoding.rs /home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-2.2.0/src/error.rs /home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-2.2.0/src/keypair.rs /home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-2.2.0/src/signer.rs /home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-2.2.0/src/verifier.rs /home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-2.2.0/src/../README.md
+
+/home/bobur/Revenant/revenant-engine/target/debug/deps/libsignature-edea55a3878e514b.rmeta: /home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-2.2.0/src/lib.rs /home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-2.2.0/src/hazmat.rs /home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-2.2.0/src/encoding.rs /home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-2.2.0/src/error.rs /home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-2.2.0/src/keypair.rs /home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-2.2.0/src/signer.rs /home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-2.2.0/src/verifier.rs /home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-2.2.0/src/../README.md
+
+/home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-2.2.0/src/lib.rs:
+/home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-2.2.0/src/hazmat.rs:
+/home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-2.2.0/src/encoding.rs:
+/home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-2.2.0/src/error.rs:
+/home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-2.2.0/src/keypair.rs:
+/home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-2.2.0/src/signer.rs:
+/home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-2.2.0/src/verifier.rs:
+/home/bobur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-2.2.0/src/../README.md:

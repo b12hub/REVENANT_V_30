@@ -1,0 +1,37 @@
+[package]
+name = "revenant-engine"
+version = "0.4.0"
+edition = "2021"
+
+[[bin]]
+name = "revenant-engine"
+path = "src/main.rs"
+
+[[bin]]
+name = "revenant-follower"
+path = "src/bin/follower.rs"
+
+[[bin]]
+name = "revenant-query"
+path = "src/bin/query.rs"
+
+[dependencies]
+aeron-rs = "=0.1.8"
+lazy_static = "1.5"
+io-uring = "0.6"
+libc = "0.2"
+aya = "0.11"
+
+# Sprint 7 additions for Query Node
+tokio = { version = "1.37", features = ["full"] }
+axum = "0.7"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+ed25519-dalek = "2.2.0"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "debuginfo"

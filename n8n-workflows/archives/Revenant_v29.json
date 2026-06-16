@@ -1,0 +1,151 @@
+
+{"name":"REVENANT_v29_0","nodes":[{"parameters":{"content":"# BLOCK 14: Post-Quantum Trust Layer\n## Hybrid Cryptography Engine\nCRYSTALS-Dilithium + Kyber integration","height":704,"width":2016,"color":6},"type":"n8n-nodes-base.stickyNote","typeVersion":1,"position":[560,448],"id":"a1b2c3d4-e5f6-7890-abcd-ef1234567890","name":"Sticky Note Block 14"},{"parameters":{"content":"# BLOCK 15: Quantum-Safe Audit Vault\n## Hash Agility & Key Lifecycle\nFuture-proof cryptographic storage","height":704,"width":2016,"color":3},"type":"n8n-nodes-base.stickyNote","typeVersion":1,"position":[560,1216],"id":"b2c3d4e5-f6a7-8901-bcde-f12345678901","name":"Sticky Note Block 15"},{"parameters":{"httpMethod":"POST","path":"pq-signing-webhook","responseMode":"responseNode","options":{}},"id":"c3d4e5f6-a7b8-9012-cdef-123456789012","name":"BLOCK 14.0: PQ Ingestion Gateway","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,800],"webhookId":"pq-v29-ingress-001"},{"parameters":{"jsCode":"// BLOCK 14.1: Hybrid Signature Generator (Hardened v29.0)\n// Generates dual classical + post-quantum signatures\nconst crypto = require('crypto');\nconst item = $input.first();\nconst payload = item.json.body || item.json;\n\nconst CLASSICAL_KEY = $vars.CLASSICAL_SIGNING_KEY || process.env.CLASSICAL_SIGNING_KEY;\nconst PQ_SEED = $vars.PQ_SIGNING_SEED || process.env.PQ_SIGNING_SEED;\n\nif (!CLASSICAL_KEY || !PQ_SEED) {\n    throw new Error(\"CRITICAL: Signing keys missing\");\n}\n\nconst canonicalPayload = JSON.stringify(payload.data || payload, Object.keys(payload.data || payload).sort());\n\nconst classicalSig = crypto.createHmac('sha256', CLASSICAL_KEY)\n    .update(canonicalPayload)\n    .digest('hex');\n\nconst pqSig = crypto.createHmac('sha512', PQ_SEED)\n    .update(canonicalPayload)\n    .update('PQ_SALT_v29')\n    .digest('hex');\n\nconst hybridSig = {\n    classical_sig: classicalSig,\n    pq_sig: pqSig,\n    pq_algorithm: 'CRYSTALS-Dilithium5-SIM',\n    hybrid_required: true,\n    payload_hash: crypto.createHash('sha256').update(canonicalPayload).digest('hex'),\n    generated_at: new Date().toISOString()\n};\n\nreturn {\n    json: {\n        signature_id: `SIG_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`,\n        payload_type: payload.payload_type || 'GENERIC',\n        hybrid_signature: hybridSig,\n        __signature_generated: true\n    }\n};"},"type":"n8n-nodes-base.code","typeVersion":2,"position":[224,800],"id":"d4e5f6a7-b8c9-0123-defa-234567890123","name":"BLOCK 14.1: Hybrid Signature Generator"},{"parameters":{"jsCode":"// BLOCK 14.2: Hybrid Validator (v29.0)\n// Validates both classical and PQ signatures\nconst crypto = require('crypto');\nconst item = $input.first();\nconst sig = item.json;\n\nconst CLASSICAL_KEY = $vars.CLASSICAL_SIGNING_KEY || process.env.CLASSICAL_SIGNING_KEY;\nconst PQ_SEED = $vars.PQ_SIGNING_SEED || process.env.PQ_SIGNING_SEED;\n\nconst payload = sig.payload || {};\nconst canonicalPayload = JSON.stringify(payload, Object.keys(payload).sort());\n\nconst expectedClassical = crypto.createHmac('sha256', CLASSICAL_KEY)\n    .update(canonicalPayload)\n    .digest('hex');\n\nconst expectedPQ = crypto.createHmac('sha512', PQ_SEED)\n    .update(canonicalPayload)\n    .update('PQ_SALT_v29')\n    .digest('hex');\n\nconst classicalValid = sig.hybrid_signature?.classical_sig === expectedClassical;\nconst pqValid = sig.hybrid_signature?.pq_sig === expectedPQ;\n\nconst hybridValid = classicalValid && pqValid;\n\nreturn {\n    json: {\n        ...sig,\n        validation: {\n            classical_valid: classicalValid,\n            pq_valid: pqValid,\n            hybrid_valid: hybridValid,\n            algorithm: sig.hybrid_signature?.pq_algorithm,\n            validated_at: new Date().toISOString()\n        },\n        __validation_passed: hybridValid\n    }\n};"},"type":"n8n-nodes-base.code","typeVersion":2,"position":[448,800],"id":"e5f6a7b8-c9d0-1234-efab-345678901234","name":"BLOCK 14.2: Hybrid Validator"},{"parameters":{"conditions":{"options":{"caseSensitive":true,"leftValue":"","typeValidation":"strict","version":3},"conditions":[{"id":"sig-check","leftValue":"={{ $json.__validation_passed }}","rightValue":"","operator":{"type":"boolean","operation":"true","singleValue":true}}],"combinator":"and"},"options":{}},"type":"n8n-nodes-base.if","typeVersion":2.3,"position":[672,800],"id":"f6a7b8c9-d0e1-2345-fabc-456789012345","name":"BLOCK 14.3: Validation Gate"},{"parameters":{"jsCode":"// BLOCK 14.3: Kyber Key Exchange (v29.0)\n// Simulates CRYSTALS-Kyber session key generation\nconst crypto = require('crypto');\nconst item = $input.first();\nconst valid = item.json;\n\nconst sessionSeed = crypto.randomBytes(32);\nconst ephemeralKey = crypto.createHash('sha256')\n    .update(sessionSeed)\n    .update('KYBER_SIM_v29')\n    .digest('hex');\n\nconst sessionKey = {\n    ephemeral_public: ephemeralKey,\n    algorithm: 'CRYSTALS-Kyber-768-SIM',\n    forward_secrecy: true,\n    expires_at: new Date(Date.now() + 3600000).toISOString()\n};\n\nreturn {\n    json: {\n        ...valid,\n        session_key: sessionKey,\n        __key_exchange_complete: true\n    }\n};"},"type":"n8n-nodes-base.code","typeVersion":2,"position":[896,800],"id":"07b8c9d0-e1f2-3456-abcd-567890123456","name":"BLOCK 14.4: Kyber Key Exchange"},{"parameters":{"jsCode":"// BLOCK 14.5: Crypto Policy Enforcer (v29.0)\nconst item = $input.first();\nconst data = item.json;\n\nconst POLICY = {\n    min_classical_key_length: 256,\n    pq_required: true,\n    hybrid_mandatory: true,\n    allowed_pq_algorithms: ['CRYSTALS-Dilithium5-SIM', 'CRYSTALS-Dilithium3-SIM'],\n    key_rotation_hours: 24\n};\n\nconst compliant = data.hybrid_signature?.hybrid_required === true &&\n    POLICY.allowed_pq_algorithms.includes(data.hybrid_signature?.pq_algorithm);\n\nreturn {\n    json: {\n        ...data,\n        policy_check: {\n            compliant: compliant,\n            policy_version: 'PQTL_v29_0',\n            enforced_constraints: POLICY,\n            checked_at: new Date().toISOString()\n        },\n        __policy_compliant: compliant\n    }\n};"},"type":"n8n-nodes-base.code","typeVersion":2,"position":[1120,800],"id":"18c9d0e1-f2a3-4567-bcde-678901234567","name":"BLOCK 14.5: Crypto Policy Enforcer"},{"parameters":{"method":"POST","url":"https://tnejfqkobchdaftsqzbw.supabase.co/rest/v1/pq_signatures","authentication":"predefinedCredentialType","nodeCredentialType":"supabaseApi","sendHeaders":true,"headerParameters":{"parameters":[{"name":"Content-Type","value":"application/json"},{"name":"Prefer","value":"return=representation"}]},"sendBody":true,"specifyBody":"json","jsonBody":"={\n  \"signature_id\": \"{{ $json.signature_id }}\",\n  \"payload_type\": \"{{ $json.payload_type }}\",\n  \"classical_sig\": \"{{ $json.hybrid_signature.classical_sig }}\",\n  \"pq_sig\": \"{{ $json.hybrid_signature.pq_sig }}\",\n  \"pq_algorithm\": \"{{ $json.hybrid_signature.pq_algorithm }}\",\n  \"payload_hash\": \"{{ $json.hybrid_signature.payload_hash }}\",\n  \"session_key\": \"{{ $json.session_key.ephemeral_public }}\",\n  \"policy_compliant\": {{ $json.__policy_compliant }},\n  \"created_at\": \"{{ new Date().toISOString() }}\"\n}","options":{}},"type":"n8n-nodes-base.httpRequest","typeVersion":4.3,"position":[1344,800],"id":"29d0e1f2-a3b4-5678-cdef-789012345678","name":"BLOCK 14.6: PQ Signature Repository","credentials":{"supabaseApi":{"id":"0fqPMb0O72FlSmre","name":"Supabase account"}}},{"parameters":{"jsCode":"// BLOCK 14.7: PQ Response Builder (v29.0)\nconst item = $input.first();\nconst data = item.json;\n\nreturn {\n    json: {\n        signature_id: data.signature_id,\n        status: 'SIGNATURE_VALID',\n        hybrid_valid: data.validation?.hybrid_valid,\n        pq_algorithm: data.hybrid_signature?.pq_algorithm,\n        session_key_algorithm: data.session_key?.algorithm,\n        policy_compliant: data.__policy_compliant,\n        quantum_ready: true,\n        response_timestamp: new Date().toISOString()\n    }\n};"},"type":"n8n-nodes-base.code","typeVersion":2,"position":[1568,800],"id":"30e1f2a3-b4c5-6789-defa-890123456789","name":"BLOCK 14.7: PQ Response Builder"},{"parameters":{"respondWith":"json","responseBody":"={{ JSON.stringify($json) }}","options":{}},"type":"n8n-nodes-base.respondToWebhook","typeVersion":1.5,"position":[1792,800],"id":"41f2a3b4-c5d6-7890-efab-901234567890","name":"BLOCK 14.8: PQ Response"},{"parameters":{"jsCode":"// ⚠️ BLOCK 14.ERROR: Signature Invalid (v29.0)\nconst item = $input.first();\nconst sig = item.json;\n\nreturn {\n    json: {\n        signature_id: sig.signature_id,\n        status: 'SIGNATURE_INVALID',\n        classical_valid: sig.validation?.classical_valid,\n        pq_valid: sig.validation?.pq_valid,\n        rejection_reason: 'HYBRID_VALIDATION_FAILED',\n        rejected_at: new Date().toISOString()\n    }\n};"},"type":"n8n-nodes-base.code","typeVersion":2,"position":[672,1024],"id":"52a3b4c5-d6e7-8901-fabc-012345678901","name":"⚠️ BLOCK 14.ERROR: Sig Invalid"},{"parameters":{"respondWith":"json","responseBody":"={{ JSON.stringify($json) }}","options":{}},"type":"n8n-nodes-base.respondToWebhook","typeVersion":1.5,"position":[896,1024],"id":"63b4c5d6-e7f8-9012-abcd-123456789012","name":"BLOCK 14.ERROR: Rejection Response"},{"parameters":{"httpMethod":"POST","path":"hash-agility-webhook","responseMode":"responseNode","options":{}},"id":"74c5d6e7-f8a9-0123-bcde-234567890123","name":"BLOCK 15.0: Hash Agility Gateway","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,1568],"webhookId":"hash-v29-ingress-001"},{"parameters":{"jsCode":"// BLOCK 15.1: Hash Agility Engine (v29.0)\n// Supports multiple hash algorithms with rotation capability\nconst crypto = require('crypto');\nconst item = $input.first();\nconst request = item.json.body || item.json;\n\nconst HASH_ALGORITHMS = {\n    'SHA-256': { fn: () => crypto.createHash('sha256'), secure: true },\n    'SHA3-512': { fn: () => crypto.createHash('sha3-512'), secure: true },\n    'BLAKE3': { fn: () => crypto.createHash('blake3'), secure: true }\n};\n\nconst selectedAlgo = request.algorithm || 'SHA-256';\nconst algo = HASH_ALGORITHMS[selectedAlgo] || HASH_ALGORITHMS['SHA-256'];\n\nconst data = request.data || '';\nconst hash = algo.fn().update(JSON.stringify(data)).digest('hex');\n\nconst agileHash = {\n    hash: hash,\n    algorithm: selectedAlgo,\n    next_supported: ['SHA3-512', 'BLAKE3'],\n    rotation_ready: true,\n    hash_length_bits: hash.length * 4\n};\n\nreturn {\n    json: {\n        hash_id: `HASH_${Date.now()}`,\n        agile_hash: agileHash,\n        __hash_generated: true\n    }\n};"},"type":"n8n-nodes-base.code","typeVersion":2,"position":[224,1568],"id":"85d6e7f8-a9b0-1234-cdef-345678901234","name":"BLOCK 15.1: Hash Agility Engine"},{"parameters":{"jsCode":"// BLOCK 15.2: Crypto Lifecycle Governor (v29.0)\nconst item = $input.first();\nconst hash = item.json;\n\nconst LIFECYCLE_POLICY = {\n    key_rotation_schedule: '24h',\n    algorithm_deprecation: ['MD5', 'SHA-1'],\n    emergency_revocation: true,\n    jurisdiction_policy: {\n        UZ: { min_algorithm: 'SHA-256', pq_required: true },\n        KZ: { min_algorithm: 'SHA-256', pq_required: false }\n    }\n};\n\nconst now = new Date();\nconst nextRotation = new Date(now.getTime() + 24 * 60 * 60 * 1000);\n\nreturn {\n    json: {\n        ...hash,\n        lifecycle: {\n            policy: LIFECYCLE_POLICY,\n            key_generated_at: now.toISOString(),\n            next_rotation_due: nextRotation.toISOString(),\n            rotation_status: 'SCHEDULED'\n        },\n        __lifecycle_tracked: true\n    }\n};"},"type":"n8n-nodes-base.code","typeVersion":2,"position":[448,1568],"id":"96e7f8a9-b0c1-2345-defa-456789012345","name":"BLOCK 15.2: Crypto Lifecycle Governor"},{"parameters":{"method":"POST","url":"https://tnejfqkobchdaftsqzbw.supabase.co/rest/v1/quantum_audit_vault","authentication":"predefinedCredentialType","nodeCredentialType":"supabaseApi","sendHeaders":true,"headerParameters":{"parameters":[{"name":"Content-Type","value":"application/json"},{"name":"Prefer","value":"return=representation"}]},"sendBody":true,"specifyBody":"json","jsonBody":"={\n  \"vault_id\": \"{{ $json.hash_id }}\",\n  \"hash_value\": \"{{ $json.agile_hash.hash }}\",\n  \"algorithm\": \"{{ $json.agile_hash.algorithm }}\",\n  \"rotation_ready\": {{ $json.agile_hash.rotation_ready }},\n  \"lifecycle_policy\": {{ JSON.stringify($json.lifecycle.policy) }},\n  \"next_rotation\": \"{{ $json.lifecycle.next_rotation_due }}\",\n  \"pq_protected\": true,\n  \"created_at\": \"{{ new Date().toISOString() }}\"\n}","options":{}},"type":"n8n-nodes-base.httpRequest","typeVersion":4.3,"position":[672,1568],"id":"07f8a9b0-c1d2-3456-efab-567890123456","name":"BLOCK 15.3: Quantum Audit Vault","credentials":{"supabaseApi":{"id":"0fqPMb0O72FlSmre","name":"Supabase account"}}},{"parameters":{"jsCode":"// BLOCK 15.4: Vault Response Builder (v29.0)\nconst item = $input.first();\nconst vault = item.json;\n\nreturn {\n    json: {\n        vault_id: vault.hash_id,\n        hash_stored: true,\n        algorithm: vault.agile_hash?.algorithm,\n        rotation_ready: vault.agile_hash?.rotation_ready,\n        next_rotation: vault.lifecycle?.next_rotation_due,\n        pq_protected: true,\n        vault_status: 'SEALED',\n        response_timestamp: new Date().toISOString()\n    }\n};"},"type":"n8n-nodes-base.code","typeVersion":2,"position":[896,1568],"id":"18a9b0c1-d2e3-4567-fabc-678901234567","name":"BLOCK 15.4: Vault Response Builder"},{"parameters":{"respondWith":"json","responseBody":"={{ JSON.stringify($json) }}","options":{}},"type":"n8n-nodes-base.respondToWebhook","typeVersion":1.5,"position":[1120,1568],"id":"29b0c1d2-e3f4-5678-abcd-789012345678","name":"BLOCK 15.5: Vault Response"}],"connections":{"BLOCK 14.0: PQ Ingestion Gateway":{"main":[[{"node":"BLOCK 14.1: Hybrid Signature Generator","type":"main","index":0}]]},"BLOCK 14.1: Hybrid Signature Generator":{"main":[[{"node":"BLOCK 14.2: Hybrid Validator","type":"main","index":0}]]},"BLOCK 14.2: Hybrid Validator":{"main":[[{"node":"BLOCK 14.3: Validation Gate","type":"main","index":0}]]},"BLOCK 14.3: Validation Gate":{"main":[[{"node":"BLOCK 14.4: Kyber Key Exchange","type":"main","index":0}],[{"node":"⚠️ BLOCK 14.ERROR: Sig Invalid","type":"main","index":0}]]},"BLOCK 14.4: Kyber Key Exchange":{"main":[[{"node":"BLOCK 14.5: Crypto Policy Enforcer","type":"main","index":0}]]},"BLOCK 14.5: Crypto Policy Enforcer":{"main":[[{"node":"BLOCK 14.6: PQ Signature Repository","type":"main","index":0}]]},"BLOCK 14.6: PQ Signature Repository":{"main":[[{"node":"BLOCK 14.7: PQ Response Builder","type":"main","index":0}]]},"BLOCK 14.7: PQ Response Builder":{"main":[[{"node":"BLOCK 14.8: PQ Response","type":"main","index":0}]]},"⚠️ BLOCK 14.ERROR: Sig Invalid":{"main":[[{"node":"BLOCK 14.ERROR: Rejection Response","type":"main","index":0}]]},"BLOCK 15.0: Hash Agility Gateway":{"main":[[{"node":"BLOCK 15.1: Hash Agility Engine","type":"main","index":0}]]},"BLOCK 15.1: Hash Agility Engine":{"main":[[{"node":"BLOCK 15.2: Crypto Lifecycle Governor","type":"main","index":0}]]},"BLOCK 15.2: Crypto Lifecycle Governor":{"main":[[{"node":"BLOCK 15.3: Quantum Audit Vault","type":"main","index":0}]]},"BLOCK 15.3: Quantum Audit Vault":{"main":[[{"node":"BLOCK 15.4: Vault Response Builder","type":"main","index":0}]]},"BLOCK 15.4: Vault Response Builder":{"main":[[{"node":"BLOCK 15.5: Vault Response","type":"main","index":0}]]}},"settings":{"executionOrder":"v1"},"staticData":null,"tags":[]}
+
+🔴 PROMPT — Harden REVENANT v29 to True Hybrid PQ Infrastructure
+
+You are a cryptographic systems architect specializing in post-quantum financial infrastructure.
+
+The current implementation:
+
+Uses HMAC-SHA256/SHA512 labeled as Dilithium/Kyber
+
+Has superficial hash agility
+
+No replay protection
+
+No canonical recursive sorting
+
+No encrypted key vault
+
+No hash chain
+
+Upgrade to regulator-grade hybrid cryptographic architecture.
+
+🔐 HARDENING REQUIREMENTS
+1️⃣ Real Hybrid Signature Model
+
+Replace HMAC simulation with:
+
+Classical: Ed25519 or RSA-PSS
+
+Post-Quantum: CRYSTALS-Dilithium (WASM binding)
+
+Sign same canonical payload with both
+
+Store public key IDs, not raw keys
+
+Both signatures must independently verify.
+
+2️⃣ Deterministic Canonicalization
+
+Implement:
+
+Recursive key sorting
+
+UTF-8 normalization
+
+Deterministic serialization
+
+No whitespace variance
+
+Strict schema validation before signing
+
+Signature must fail if any non-canonical payload is passed.
+
+3️⃣ Replay Protection
+
+Add:
+
+Nonce
+
+Timestamp with max skew (±60s)
+
+Idempotency key
+
+DB uniqueness constraint
+
+Reject expired or reused signature attempts.
+
+4️⃣ Real KEM (Kyber)
+
+Implement:
+
+Public key distribution
+
+Ciphertext encapsulation
+
+Shared secret derivation
+
+Do NOT store shared secret
+
+Enforce 1-hour expiry
+
+Forward secrecy validation
+
+No simulated entropy hacks.
+
+5️⃣ Secure Vault Integration
+
+Session keys and PQ signatures must be:
+
+Wrapped using KMS
+
+Encrypted at rest
+
+Never stored raw in Supabase
+
+Hash-chained with previous vault record
+
+6️⃣ Hash Agility Enforcement
+
+Remove unsupported algorithms
+
+Validate algorithm availability at runtime
+
+Add algorithm deprecation scheduler
+
+Add automated rotation trigger
+
+7️⃣ Audit Hash Chain
+
+Every stored signature must include:
+
+previous_signature_hash
+current_hash = SHA256(payload + previous_hash)
+
+
+Create tamper-evident ledger.
+
+8️⃣ Crypto Policy Enforcement
+
+Policy engine must enforce:
+
+Minimum entropy
+
+Signature length validation
+
+Algorithm whitelist
+
+Jurisdiction crypto compliance rules
+
+No cosmetic compliance flags.
+
+Output Requirements
+
+Valid n8n JSON
+
+No simulated PQ algorithms
+
+Enforced replay protection
+
+Vault encryption integration
+
+Hash-chain audit ledger
+
+Production-grade hybrid validation
+
+Upgrade to real quantum-safe governance infrastructure.
+
+That’s your v29 hardening blueprint.
+
+Now let’s dissect v30.

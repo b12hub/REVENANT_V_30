@@ -1,0 +1,277 @@
+{
+  "name": "Master Triage Router",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "master-trigger-router",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -144,
+        -32
+      ],
+      "id": "48f7adf5-b76e-41d5-9c79-682e975d6893",
+      "name": "Webhook",
+      "webhookId": "70e48f7f-f618-4c99-abc9-f0c782509726"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ================================================================\n// 1. Type Definitions (for documentation; JS-compatible in n8n)\n// ================================================================\n\ninterface GeoPoint {\n  lat: number;\n  lon: number;\n}\n\ninterface RoutingInput {\n  /** Transaction amount in UZS (0 if not a transaction) */\n  amount: number;\n  /** User's registered location (optional) */\n  userLocation?: GeoPoint;\n  /** Location inferred from device (optional) */\n  deviceLocation?: GeoPoint;\n  /** Number of requests from this user in the last hour */\n  recentRequestCount: number;\n  /** Device trust score provided by the perimeter (0 = untrusted, 100 = fully trusted) */\n  deviceTrustScore: number;\n  /** Normalised intent: 'FAQ', 'TRANSACTION', 'ACCESS_ISSUE', 'PAYMENT_ISSUE', etc. */\n  intent: string;\n  /** Destination account (for transfers) – undefined if missing */\n  destinationAccount?: string;\n  /** Full user message for ambiguity checks */\n  message?: string;\n}\n\ninterface RoutingDecision {\n  route: string;\n  risk_score: number;\n  ambiguity_score: number;\n}\n\n// ================================================================\n// 2. Configuration – All magic numbers live here\n// ================================================================\n\nconst CONFIG = {\n  // Risk Score weights (must sum to 1)\n  WEIGHTS: {\n    amount: 0.40,\n    geo: 0.25,\n    velocity: 0.20,\n    device: 0.15,\n  },\n\n  // Amount risk: linear up to the hard block limit (50M UZS)\n  AMOUNT_MAX: 50_000_000,\n\n  // Geo mismatch: distance threshold in kilometres (if lat/lon available)\n  GEO_MISMATCH_KM: 100,\n  // Score contribution when mismatch is confirmed (0 or 100)\n  GEO_MISMATCH_SCORE: 100,\n\n  // Velocity risk: max “normal” requests per hour\n  VELOCITY_MAX_PER_HOUR: 60,\n\n  // Ambiguity: required fields per intent\n  REQUIRED_FIELDS: {\n    TRANSACTION: ['amount', 'destinationAccount'],\n    FAQ: ['message'],\n    // fallback – no required fields means ambiguity always 0\n    DEFAULT: [],\n  },\n};\n\n// ================================================================\n// 3. Helper: Haversine distance (km) – safe even without coordinates\n// ================================================================\n\nfunction haversineDistance(a: GeoPoint, b: GeoPoint): number {\n  const R = 6371; // Earth radius in km\n  const dLat = ((b.lat - a.lat) * Math.PI) / 180;\n  const dLon = ((b.lon - a.lon) * Math.PI) / 180;\n  const lat1 = (a.lat * Math.PI) / 180;\n  const lat2 = (b.lat * Math.PI) / 180;\n  const sinDLat = Math.sin(dLat / 2);\n  const sinDLon = Math.sin(dLon / 2);\n  const aVal =\n    sinDLat * sinDLat + Math.cos(lat1) * Math.cos(lat2) * sinDLon * sinDLon;\n  const c = 2 * Math.atan2(Math.sqrt(aVal), Math.sqrt(1 - aVal));\n  return R * c;\n}\n\n// ================================================================\n// 4. Individual Risk Components (each returns 0–100)\n// ================================================================\n\nfunction amountRisk(amount: number): number {\n  // Linear scale: 0 at 0 UZS, 100 at AMOUNT_MAX (50M)\n  return Math.min((amount / CONFIG.AMOUNT_MAX) * 100, 100);\n}\n\nfunction geoRisk(userLoc?: GeoPoint, deviceLoc?: GeoPoint): number {\n  if (!userLoc || !deviceLoc) {\n    // Without data we cannot prove mismatch => assume safe (0)\n    return 0;\n  }\n  const dist = haversineDistance(userLoc, deviceLoc);\n  return dist > CONFIG.GEO_MISMATCH_KM ? CONFIG.GEO_MISMATCH_SCORE : 0;\n}\n\nfunction velocityRisk(recentCount: number): number {\n  // Linear scale: 0 at 0 requests, 100 at VELOCITY_MAX_PER_HOUR\n  return Math.min((recentCount / CONFIG.VELOCITY_MAX_PER_HOUR) * 100, 100);\n}\n\nfunction deviceRisk(trustScore: number): number {\n  // Invert: high trust => low risk\n  return 100 - trustScore;\n}\n\n// ================================================================\n// 5. Composite Risk Score (weighted arithmetic mean)\n// ================================================================\n\nfunction calculateRiskScore(input: RoutingInput): number {\n  const w = CONFIG.WEIGHTS;\n  const score =\n    w.amount * amountRisk(input.amount) +\n    w.geo * geoRisk(input.userLocation, input.deviceLocation) +\n    w.velocity * velocityRisk(input.recentRequestCount) +\n    w.device * deviceRisk(input.deviceTrustScore);\n\n  return Math.round(score);\n}\n\n// ================================================================\n// 6. Ambiguity Score (missing required context)\n// ================================================================\n\nfunction calculateAmbiguityScore(input: RoutingInput): number {\n  // Determine which fields are required for this intent\n  const required = CONFIG.REQUIRED_FIELDS[\n    input.intent as keyof typeof CONFIG.REQUIRED_FIELDS\n  ] ?? CONFIG.REQUIRED_FIELDS.DEFAULT;\n\n  if (required.length === 0) return 0;\n\n  let missingCount = 0;\n  for (const field of required) {\n    const value = (input as any)[field];\n    if (field === 'amount') {\n      // Amount is required if it is 0 or NaN\n      if (!value || value <= 0) missingCount++;\n    } else if (field === 'destinationAccount') {\n      if (!value || typeof value !== 'string' || value.trim() === '') missingCount++;\n    } else if (field === 'message') {\n      if (!value || typeof value !== 'string' || value.trim() === '') missingCount++;\n    }\n  }\n\n  // Linear mapping: all missing → 100, none missing → 0\n  return Math.round((missingCount / required.length) * 100);\n}\n\n// ================================================================\n// 7. Triage Logic – Deterministic Routing\n// ================================================================\n\nfunction determineRoute(input: RoutingInput): RoutingDecision {\n  const risk_score = calculateRiskScore(input);\n  const ambiguity_score = calculateAmbiguityScore(input);\n\n  let route: string;\n\n  // Rule 1: High ambiguity → always ask for clarification\n  if (ambiguity_score > 40) {\n    route = 'CLARIFICATION_LOOP';\n  }\n  // Rule 2: Simple FAQ with low risk → fast FAQ flow\n  else if (input.intent === 'FAQ' && risk_score < 20) {\n    route = 'FLOW_FAQ';\n  }\n  // Rule 3: High risk → security flow\n  else if (risk_score > 80) {\n    route = 'FLOW_SECURITY';\n  }\n  // Rule 4: Transaction intent → transaction flow\n  else if (input.intent === 'TRANSACTION') {\n    route = 'FLOW_TRANSACTION';\n  }\n  // Fallback for any other combination (general_inquiry, access_issue, etc.)\n  else {\n    route = 'FLOW_GENERAL';\n  }\n\n  return { route, risk_score, ambiguity_score };\n}\n\n// ================================================================\n// 8. Exported entry point – drop this into an n8n Code Node\n// ================================================================\n\n/**\n * Main function for n8n Code Node.\n * Expects `$input.first().json` to contain the RoutingInput fields.\n * Returns the RoutingDecision as `{ json: { route, risk_score, ambiguity_score } }`.\n */\nfunction routerNode(input: any): { json: RoutingDecision } {\n  // Safely coerce inputs\n  const safeInput: RoutingInput = {\n    amount: parseFloat(input.amount) || 0,\n    userLocation: input.userLocation || undefined,\n    deviceLocation: input.deviceLocation || undefined,\n    recentRequestCount: parseInt(input.recentRequestCount, 10) || 0,\n    deviceTrustScore: Math.min(100, Math.max(0, parseFloat(input.deviceTrustScore) || 0)),\n    intent: input.intent || 'DEFAULT',\n    destinationAccount: input.destinationAccount,\n    message: input.message,\n  };\n\n  const decision = determineRoute(safeInput);\n  return { json: decision };\n}\n\n// Example usage in n8n:\n\nexport { determineRoute, routerNode, RoutingInput, RoutingDecision };\n\n// ================================================================\n// 9. JSON Schema of the Routing Decision (for downstream nodes)\n// ================================================================\n/*\n{\n  \"$schema\": \"http://json-schema.org/draft-07/schema#\",\n  \"title\": \"RoutingDecision\",\n  \"type\": \"object\",\n  \"properties\": {\n    \"route\": {\n      \"type\": \"string\",\n      \"enum\": [\n        \"CLARIFICATION_LOOP\",\n        \"FLOW_FAQ\",\n        \"FLOW_SECURITY\",\n        \"FLOW_TRANSACTION\",\n        \"FLOW_GENERAL\"\n      ]\n    },\n    \"risk_score\": {\n      \"type\": \"integer\",\n      \"minimum\": 0,\n      \"maximum\": 100\n    },\n    \"ambiguity_score\": {\n      \"type\": \"integer\",\n      \"minimum\": 0,\n      \"maximum\": 100\n    }\n  },\n  \"required\": [\"route\", \"risk_score\", \"ambiguity_score\"]\n}\n*/\n\nreturn routerNode($input.first().json);"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        64,
+        -32
+      ],
+      "id": "c151eb7d-241c-4555-93fb-22f3ae2cf867",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "FLOW_FAQ",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "471722d8-555a-4b40-a860-92376ed7cce5"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "FLOW_FAQ"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "c4765cc1-f619-4596-9f5d-a0a9ff328557",
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "FLOW_TRANSACTION",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "FLOW_TRANSACTION"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "b1c269ef-497b-46f5-a5e7-7e74e06f21ec",
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "FLOW_SECURITY",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "FLOW_SECURITY"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "9b625164-3be2-4bd9-bfe0-ec57859eaa34",
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "CLARIFICATION_LOOP",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "CLARIFICATION_LOOP"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "c77d8139-f324-477c-9bd3-f5b5f1ea3435",
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "FLOW_GENERAL",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "FLOW_GENERAL"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        272,
+        -80
+      ],
+      "id": "6d2d4cc5-0e96-4d66-9498-03fc880dbf7e",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        704,
+        -368
+      ],
+      "id": "613508bf-283a-486e-b4a3-b81b663e523b",
+      "name": "FAQ sub-workflow"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        704,
+        -192
+      ],
+      "id": "6ffe1b19-cdd7-496b-8775-0d548bcbd400",
+      "name": "Core Banking sub-workflow"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        704,
+        -32
+      ],
+      "id": "f3b82a73-0a67-4f05-82bf-4604da384e14",
+      "name": "Security Lockdown sub-workflow"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "FAQ sub-workflow",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Core Banking sub-workflow",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Security Lockdown sub-workflow",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [],
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "0b1ac5b9-9af1-4358-9a6e-3efedf07e00a",
+  "meta": {
+    "instanceId": "78c6a364e8ea556c4441f54ffc3b18dfc6557a3412b75e7187eae4ac0d914297"
+  },
+  "id": "Z9hergNnQQoESTyw",
+  "tags": []
+}

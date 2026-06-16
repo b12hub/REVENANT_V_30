@@ -1,0 +1,36 @@
+# =============================================================================
+# deploy/docker-compose.yml
+# REVENANT Gateway — Decoupled Dual-Driver Aeron Topology
+# =============================================================================
+
+services:
+  # DRIVER 1: The Legacy Driver for the Rust Engine (v1.25.1 / Java 11)
+  aeron-driver-rust:
+    image: amazoncorretto:11
+    container_name: aeron-driver-rust
+    network_mode: host
+    ipc: host
+    restart: unless-stopped
+    user: "1000:1000"
+    command:
+      - sh
+      - -c
+      - |
+        curl -sLo /tmp/aeron.jar https://repo1.maven.org/maven2/io/aeron/aeron-all/1.25.1/aeron-all-1.25.1.jar
+        # FIX: Force the driver to use the exact default path the Rust C++ client is looking for
+        exec java --add-opens=java.base/sun.nio.ch=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/jdk.internal.misc=ALL-UNNAMED -Daeron.dir=/dev/shm/aeron-bobur -Daeron.threading.mode=DEDICATED -Daeron.conductor.idle.strategy=org.agrona.concurrent.BusySpinIdleStrategy -Daeron.sender.idle.strategy=org.agrona.concurrent.BusySpinIdleStrategy -Daeron.receiver.idle.strategy=org.agrona.concurrent.BusySpinIdleStrategy -Daeron.term.buffer.length=67108864 -Daeron.socket.so_sndbuf=4194304 -Daeron.socket.so_rcvbuf=4194304 -cp /tmp/aeron.jar io.aeron.driver.MediaDriver
+
+  # DRIVER 2: The Modern Driver for the Go Gateway (v1.44.1 / Java 17)
+  aeron-driver-go:
+    image: amazoncorretto:17-alpine
+    container_name: aeron-driver-go
+    network_mode: host
+    ipc: host
+    restart: unless-stopped
+    user: "1000:1000"
+    command:
+      - sh
+      - -c
+      - |
+        wget -qO /tmp/aeron.jar https://repo1.maven.org/maven2/io/aeron/aeron-all/1.44.1/aeron-all-1.44.1.jar
+        exec java --add-opens java.base/sun.nio.ch=ALL-UNNAMED --add-opens java.base/java.util.zip=ALL-UNNAMED -Daeron.dir=/dev/shm/aeron-go -Daeron.threading.mode=DEDICATED -Daeron.conductor.idle.strategy=spin -Daeron.sender.idle.strategy=spin -Daeron.receiver.idle.strategy=spin -Daeron.term.buffer.length=67108864 -Daeron.socket.so_sndbuf=4194304 -Daeron.socket.so_rcvbuf=4194304 -cp /tmp/aeron.jar io.aeron.driver.MediaDriver

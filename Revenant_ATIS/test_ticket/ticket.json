@@ -1,0 +1,702 @@
+[
+  {
+    "body": {
+      "subject": "Pul yechildi lekin tushmadi",
+      "body": "Assalomu alaykum. Payme orqali 8600 1234 5678 9012 kartasidan 500,000 so'm o'tkazgandim. Meni balansimdan ketdi lekin u tomonga bormadi. Iltimos tekshirib bering!!",
+      "customer_email": "nodir.bek@gmail.com"
+    }
+  },
+  {
+    "body": {
+      "subject": "ОШИБКА ПРИ ОПЛАТЕ",
+      "body": "Я пытаюсь оплатить свет (РЭС), но выходит ошибка 'Сервис временно недоступен'. Когда почините?? У меня счетчик пищит уже.",
+      "customer_email": "sveta.ivanova@mail.ru"
+    }
+  },
+  {
+    "body": {
+      "subject": "Delivery late",
+      "body": "Order #44921 from Uzum Market. It was supposed to be here yesterday. Why is the courier not calling me?",
+      "customer_email": "expat_john@company.uz"
+    }
+  },
+  {
+    "body": {
+      "subject": "SMS kod kelmayapti",
+      "body": "Login qilolmayapman. Telefonimga sms kod umuman kelmayapti. Operator Ucell. 3 marta urindim.",
+      "customer_email": "jasur1990@yandex.uz"
+    }
+  },
+  {
+    "body": {
+      "subject": "Karta bloklanib qoldi",
+      "body": "Humo kartam (9860 **** **** 1111) birdaniga bloklandi. Bankka borishim shartmi yoki ilovada ochsa bo'ladimi?",
+      "customer_email": "malika.hon@list.ru"
+    }
+  },
+  {
+    "body": {
+      "subject": "Возврат денег за товар",
+      "body": "Купил кроссовки, размер не подошел. Хочу вернуть деньги на карту. Чек есть.",
+      "customer_email": "timur_k@bk.ru"
+    }
+  },
+  {
+    "body": {
+      "subject": "Bug report iOS 17",
+      "body": "The app crashes every time I try to open the 'History' tab on my iPhone 14 Pro. Fix it please.",
+      "customer_email": "dev.tester@gmail.com"
+    }
+  },
+  {
+    "body": {
+      "subject": "Limitni ko'tarish kerak",
+      "body": "Men kunlik limitni 100 mln so'mga ko'tarmoqchiman. Identifikatsiyadan o'tganman. Pasport seriyam AA 1234567.",
+      "customer_email": "business_man@outlook.com"
+    }
+  },
+  {
+    "body": {
+      "subject": "Spam message?",
+      "body": "Menga sizlardan 'Yutuq yutdingiz' degan sms keldi. Bu rostmi yoki firibgarlarmi?",
+      "customer_email": "aziza_teacher@maktab.uz"
+    }
+  },
+  {
+    "body": {
+      "subject": "Не проходит верификация",
+      "body": "Пытаюсь пройти MyID, сканирую лицо, но пишет 'Ошибка распознавания'. Я уже 10 раз пробовал.",
+      "customer_email": "ruslan.t@yandex.ru"
+    }
+  },
+  {
+    "body": {
+      "subject": "Kredit yopish",
+      "body": "Muddatidan oldin kreditni yopsam foizlarni qayta hisoblab berasizlarmi?",
+      "customer_email": "sherzod.b@gmail.com"
+    }
+  },
+  {
+    "body": {
+      "subject": "Change phone number",
+      "body": "I lost my sim card +998 90 123 45 67. Can I link my account to a new number +998 99 987 65 43?",
+      "customer_email": "sarah.k@ngo.uz"
+    }
+  },
+  {
+    "body": {
+      "subject": "Qayerdasizlar?",
+      "body": "Ofisingiz manzili qayerda? Toshkent shahar Chilonzor filialingiz ishlamayapti.",
+      "customer_email": "otabek.q@mail.ru"
+    }
+  },
+  {
+    "body": {
+      "subject": "Двойная транзакция",
+      "body": "Оплатил за интернет, деньги сняли два раза! Верните 60 000 сум срочно. Карта 8600 0000 0000 0000.",
+      "customer_email": "elena.p@list.ru"
+    }
+  },
+  {
+    "body": {
+      "subject": "Promo kod xato",
+      "body": "Navruz bayrami uchun berilgan promo kodni kiritdim, 'Yaroqsiz' deyapti. Nega aldayapsizlar?",
+      "customer_email": "botir.j@yandex.uz"
+    }
+  },
+  {
+    "body": {
+      "subject": "Partnership inquiry",
+      "body": "Hello, we are a logistics company in Tashkent. We want to integrate your payment gateway API.",
+      "customer_email": "ceo@logistics.uz"
+    }
+  },
+  {
+    "body": {
+      "subject": "Ilova sekin ishlayapti",
+      "body": "Bugun ilova juda qotib qolyapti. Internetim yaxshi, Wi-Fi da ham shunday.",
+      "customer_email": "farhod.gamer@gmail.com"
+    }
+  },
+  {
+    "body": {
+      "subject": "Налог на имущество",
+      "body": "Где найти квитанцию после оплаты налога? Мне нужно показать в налоговой.",
+      "customer_email": "anvar.aka@bk.ru"
+    }
+  },
+  {
+    "body": {
+      "subject": "Virtual karta ochish",
+      "body": "Visa virtual karta ochsam, unga bankomatdan pul tashlasam bo'ladimi?",
+      "customer_email": "student_tuit@gmail.com"
+    }
+  },
+  {
+    "body": {
+      "subject": "Delete my data",
+      "body": "Please delete all my personal data from your servers immediately.",
+      "customer_email": "privacy@user.com"
+    }
+  },
+  {
+    "body": {
+      "subject": "Gaz uchun to'lov",
+      "body": "Gaz hisoblagichga pul tashladim, lekin gaz yonmadi. Kodni qanday aktivatsiya qilaman?",
+      "customer_email": "mahalla_rais@mail.ru"
+    }
+  },
+  {
+    "body": {
+      "subject": "Сбой в банкомате",
+      "body": "Банкомат на Алайском съел карту и не вернул. Что делать?",
+      "customer_email": "olga.v@yandex.ru"
+    }
+  },
+  {
+    "body": {
+      "subject": "Click vs Payme",
+      "body": "Sizlarda komissiya 1% ekan, Clickda 0.5%. Nega sizlarda qimmat?",
+      "customer_email": "iqtisodchi@gmail.com"
+    }
+  },
+  {
+    "body": {
+      "subject": "Wrong item delivered",
+      "body": "I ordered a black iPhone case but received a red one. Order #998811.",
+      "customer_email": "customer@gmail.com"
+    }
+  },
+  {
+    "body": {
+      "subject": "Humo pay ishlamayapti",
+      "body": "Telefonda NFC orqali to'lab bo'lmayapti. Terminal xato beryapti.",
+      "customer_email": "sanjar.tech@mail.ru"
+    }
+  },
+  {
+    "body": {
+      "subject": "Забыл пароль",
+      "body": "Как восстановить доступ, если я забыл кодовое слово?",
+      "customer_email": "dima.k@list.ru"
+    }
+  },
+  {
+    "body": {
+      "subject": "International transfer",
+      "body": "Can I receive money from Russia via Sberbank directly to my Uzcard?",
+      "customer_email": "migrant.worker@mail.ru"
+    }
+  },
+  {
+    "body": {
+      "subject": "Avto jarima",
+      "body": "Mashinam jarimasini to'ladim, lekin GAI bazasida hali ham qarzdorlik turibdi.",
+      "customer_email": "driver.taxi@yandex.uz"
+    }
+  },
+  {
+    "body": {
+      "subject": "Кэшбек не начислен",
+      "body": "Потратил 1 млн сум в Корзинке, кэшбек не пришел. Где мои баллы?",
+      "customer_email": "shoppers@bk.ru"
+    }
+  },
+  {
+    "body": {
+      "subject": "API 500 Error",
+      "body": "Your public API endpoint /v1/transactions is returning 500 Internal Server Error.",
+      "customer_email": "admin@integration.uz"
+    }
+  },
+  {
+    "body": {
+      "subject": "Salom",
+      "body": "Ishga kirmoqchi edim. Vakansiyalar bormi?",
+      "customer_email": "job.seeker@gmail.com"
+    }
+  },
+  {
+    "body": {
+      "subject": "Karta raqami ko'rinmayapti",
+      "body": "Ilovada kartamni oxirgi 4 raqami ko'rinyapti xolos. To'liq raqamni qanday ko'rsam bo'ladi?",
+      "customer_email": "nodira1985@mail.ru"
+    }
+  },
+  {
+    "body": {
+      "subject": "Мошенничество",
+      "body": "С моей карты 8600 **** **** 4444 списали деньги в Google Ads. Я этого не делал!",
+      "customer_email": "victor.s@gmail.com"
+    }
+  },
+  {
+    "body": {
+      "subject": "Feature request",
+      "body": "Please add Dark Mode to the Android app. My eyes hurt at night.",
+      "customer_email": "night.owl@yandex.uz"
+    }
+  },
+  {
+    "body": {
+      "subject": "Propiska muammosi",
+      "body": "Men Toshkent viloyatida turaman, lekin pasportimda Surxondaryo propiskasi. Kredit olsam bo'ladimi?",
+      "customer_email": "surxon.boy@list.ru"
+    }
+  },
+  {
+    "body": {
+      "subject": "Не работает QR",
+      "body": "Пытаюсь сканировать QR код в автобусе, приложение не реагирует.",
+      "customer_email": "passenger@mail.ru"
+    }
+  },
+  {
+    "body": {
+      "subject": "Valyuta kursi",
+      "body": "Bugungi dollar kursi qancha bo'ldi? Ilovada eski kurs turibdi.",
+      "customer_email": "trader@forex.uz"
+    }
+  },
+  {
+    "body": {
+      "subject": "B2B contract",
+      "body": "We need invoice for last month's services for our accounting department.",
+      "customer_email": "accountant@corp.uz"
+    }
+  },
+  {
+    "body": {
+      "subject": "Ipoteka",
+      "body": "Uy sotib olish uchun boshlang'ich to'lov qancha?",
+      "customer_email": "young.family@gmail.com"
+    }
+  },
+  {
+    "body": {
+      "subject": "Смена языка",
+      "body": "Как поменять язык приложения на русский? Не могу найти в настройках.",
+      "customer_email": "babushka@mail.ru"
+    }
+  },
+  {
+    "body": {
+      "subject": "VPN to'lov",
+      "body": "ExpressVPN uchun to'lov qilsam bo'ladimi? Visa kartam yo'q.",
+      "customer_email": "gamer_pro@gmail.com"
+    }
+  },
+  {
+    "body": {
+      "subject": "Perevod xato ketdi",
+      "body": "Shoshilib boshqa kartaga pul tashlab yubordim. Qaytarib olib bo'ladimi? Iltimos yordam bering.",
+      "customer_email": "shoshqaloq@yandex.uz"
+    }
+  },
+  {
+    "body": {
+      "subject": "Child card",
+      "body": "Can I open a card for my 12 year old son connected to my account?",
+      "customer_email": "parent@school.uz"
+    }
+  },
+  {
+    "body": {
+      "subject": "Terminal qog'ozi",
+      "body": "Do'konimizdagi terminalda qog'oz tugadi. Kimga murojaat qilaylik?",
+      "customer_email": "shop_manager@retail.uz"
+    }
+  },
+  {
+    "body": {
+      "subject": "Блокировка по ошибке",
+      "body": "Вы заблокировали мой кошелек. Я ничего не нарушал. Разблокируйте!",
+      "customer_email": "angry.user@bk.ru"
+    }
+  },
+  {
+    "body": {
+      "subject": "Internet paketi",
+      "body": "Uzmobile paket sotib oldim, lekin megabaytlar qo'shilmadi.",
+      "customer_email": "student.uzswlu@gmail.com"
+    }
+  },
+  {
+    "body": {
+      "subject": "SWIFT code",
+      "body": "What is the SWIFT code for your Yunusabad branch?",
+      "customer_email": "importer@trade.uz"
+    }
+  },
+  {
+    "body": {
+      "subject": "Biometriya xatolik",
+      "body": "Yuzni tanish tizimi ishlamayapti. Qorong'ida ko'rmayapti.",
+      "customer_email": "night.user@mail.ru"
+    }
+  },
+  {
+    "body": {
+      "subject": "Кредитные каникулы",
+      "body": "Можно ли оформить кредитные каникулы? Я потерял работу.",
+      "customer_email": "sad_user@list.ru"
+    }
+  },
+  {
+    "body": {
+      "subject": "Hamkorlik",
+      "body": "Bizning restoranda sizlarning QR to'lov tizimingizni o'rnatmoqchimiz.",
+      "customer_email": "oshxona@food.uz"
+    }
+  },
+  {
+    "body": {
+      "subject": "Test Ticket 1",
+      "body": "Ignore this. System check.",
+      "customer_email": "qa@internal.com"
+    }
+  },
+  {
+    "body": {
+      "subject": "Pensiya",
+      "body": "Pensiya pulim 2 kun kechikdi. Nega?",
+      "customer_email": "otahon@mahalla.uz"
+    }
+  },
+  {
+    "body": {
+      "subject": "Лимит карты",
+      "body": "Почему я не могу оплатить покупку на 50 млн сум? У меня премиум карта.",
+      "customer_email": "vip.client@gmail.com"
+    }
+  },
+  {
+    "body": {
+      "subject": "Callback URL",
+      "body": "Where do I set the callback URL for payment notifications in the merchant dashboard?",
+      "customer_email": "dev@shop.uz"
+    }
+  },
+  {
+    "body": {
+      "subject": "Yangi telefon",
+      "body": "Telefonimni almashtirdim, eski akkauntimga kira olmayapman.",
+      "customer_email": "new.phone@yandex.uz"
+    }
+  },
+  {
+    "body": {
+      "subject": "Subsidiyalar",
+      "body": "Davlat subsidiyalari bo'yicha ma'lumot bormi ilovada?",
+      "customer_email": "citizen@gov.uz"
+    }
+  },
+  {
+    "body": {
+      "subject": "Ошибка сервера",
+      "body": "Приложение пишет 'Ошибка 502' уже час.",
+      "customer_email": "monitoring@uptime.com"
+    }
+  },
+  {
+    "body": {
+      "subject": "Refund status",
+      "body": "I requested a refund 5 days ago. Status is still 'Processing'.",
+      "customer_email": "impatient@gmail.com"
+    }
+  },
+  {
+    "body": {
+      "subject": "Elektr hisoblagich",
+      "body": "Hisoblagich raqamini xato kiritibman. To'lovni boshqa hisobga o'tkazib bering.",
+      "customer_email": "mistake@mail.ru"
+    }
+  },
+  {
+    "body": {
+      "subject": "Kredit tarixi",
+      "body": "Kredit tariximni tozalasa bo'ladimi? Puli bilan.",
+      "customer_email": "fraudster?@bk.ru"
+    }
+  },
+  {
+    "body": {
+      "subject": "Виртуальный терминал",
+      "body": "Как подключить виртуальный терминал для телеграм-бота?",
+      "customer_email": "bot.maker@list.ru"
+    }
+  },
+  {
+    "body": {
+      "subject": "Apple Pay",
+      "body": "When will you support Apple Pay for Uzcard?",
+      "customer_email": "apple.fan@icloud.com"
+    }
+  },
+  {
+    "body": {
+      "subject": "Oylik tushmadi",
+      "body": "Hamma hamkasblarimga oylik tushdi, menga tushmadi. Karta 8600...",
+      "customer_email": "worker@factory.uz"
+    }
+  },
+  {
+    "body": {
+      "subject": "Смена пин-кода",
+      "body": "Я хочу поменять пин-код карты, но не помню старый.",
+      "customer_email": "forgetful@yandex.ru"
+    }
+  },
+  {
+    "body": {
+      "subject": "2FA Issue",
+      "body": "Google Authenticator codes are invalid.",
+      "customer_email": "security@tech.uz"
+    }
+  },
+  {
+    "body": {
+      "subject": "Bankomat pul yeb qo'ydi",
+      "body": "Pul sanayotganda svet o'chib qoldi, bankomat kartamni va pulni qaytarmadi.",
+      "customer_email": "bad.luck@gmail.com"
+    }
+  },
+  {
+    "body": {
+      "subject": "Курс рубля",
+      "body": "Почему такой низкий курс покупки рубля?",
+      "customer_email": "migrant@mail.ru"
+    }
+  },
+  {
+    "body": {
+      "subject": "Ismigul",
+      "body": "Ismigul ismim xato yozilgan kartada. To'g'irlasa bo'ladimi?",
+      "customer_email": "ismigul@yandex.uz"
+    }
+  },
+  {
+    "body": {
+      "subject": "GDPR compliance",
+      "body": "Are you compliant with EU GDPR regulations for data storage?",
+      "customer_email": "legal@eu-partner.com"
+    }
+  },
+  {
+    "body": {
+      "subject": "Aloqa yo'q",
+      "body": "Call-centerga tushib bo'lmayapti. 20 minut kutdim.",
+      "customer_email": "angry.customer@gmail.com"
+    }
+  },
+  {
+    "body": {
+      "subject": "Зависшее приложение",
+      "body": "Приложение зависает на заставке загрузки. Телефон Samsung A51.",
+      "customer_email": "android.user@bk.ru"
+    }
+  },
+  {
+    "body": {
+      "subject": "Sticker pack",
+      "body": "Where can I download your branded Telegram stickers?",
+      "customer_email": "fan@telegram.uz"
+    }
+  },
+  {
+    "body": {
+      "subject": "Kredit foizi",
+      "body": "Kredit foizini kamaytirsa bo'ladimi?",
+      "customer_email": "dreamer@list.ru"
+    }
+  },
+  {
+    "body": {
+      "subject": "История уведомлений",
+      "body": "Случайно удалил пуш-уведомление с кодом. Где посмотреть историю?",
+      "customer_email": "clicker@mail.ru"
+    }
+  },
+  {
+    "body": {
+      "subject": "Freelance tax",
+      "body": "How do I pay taxes for freelance income through your app?",
+      "customer_email": "freelancer@upwork.com"
+    }
+  },
+  {
+    "body": {
+      "subject": "Naqd pul yechish",
+      "body": "Qaysi bankomatda komissiyasiz pul yechsa bo'ladi?",
+      "customer_email": "cash.lover@yandex.uz"
+    }
+  },
+  {
+    "body": {
+      "subject": "Перевод по номеру телефона",
+      "body": "Не могу перевести деньги по номеру, контакт не светится синим.",
+      "customer_email": "contact.issue@gmail.com"
+    }
+  },
+  {
+    "body": {
+      "subject": "Promo code",
+      "body": "Do you have any promo codes for new users?",
+      "customer_email": "newbie@hotmail.com"
+    }
+  },
+  {
+    "body": {
+      "subject": "Plastik karta yo'qoldi",
+      "body": "Kartamni yo'qotib qo'ydim. Bloklash uchun nima qilishim kerak? Ilova o'chirilgan.",
+      "customer_email": "lost.card@mail.ru"
+    }
+  },
+  {
+    "body": {
+      "subject": "Оплата штрафа",
+      "body": "Хочу оплатить штраф ГАИ, но не знаю номер постановления. Можно по номеру машины?",
+      "customer_email": "driver@bk.ru"
+    }
+  },
+  {
+    "body": {
+      "subject": "Widget issue",
+      "body": "The iOS widget is not updating the balance in real-time.",
+      "customer_email": "ios.dev@gmail.com"
+    }
+  },
+  {
+    "body": {
+      "subject": "Humo virtual CVV",
+      "body": "Humo virtual kartasining CVV kodini qayerdan ko'rsam bo'ladi?",
+      "customer_email": "shopper@zoodmall.uz"
+    }
+  },
+  {
+    "body": {
+      "subject": "Личный кабинет",
+      "body": "Не могу зайти в личный кабинет через браузер. Пишет 'неверный сертификат'.",
+      "customer_email": "web.user@yandex.ru"
+    }
+  },
+  {
+    "body": {
+      "subject": "Insurance claim",
+      "body": "How do I file an insurance claim for my travel insurance purchased via app?",
+      "customer_email": "traveler@booking.com"
+    }
+  },
+  {
+    "body": {
+      "subject": "Karta muddati tugadi",
+      "body": "Kartam muddati tugadi, lekin ichida pul qolgan. Qanday yechib olsam bo'ladi?",
+      "customer_email": "old.user@gmail.com"
+    }
+  },
+  {
+    "body": {
+      "subject": "Реквизиты банка",
+      "body": "Пришлите полные реквизиты банка для перечисления зарплаты.",
+      "customer_email": "employee@corp.uz"
+    }
+  },
+  {
+    "body": {
+      "subject": "Uzum Nasiya",
+      "body": "Nasiyaga tovar olmoqchi edim, limitim yetmayapti.",
+      "customer_email": "buyer@uzum.uz"
+    }
+  },
+  {
+    "body": {
+      "subject": "NFC Payment",
+      "body": "Does your app support NFC payment on WatchOS?",
+      "customer_email": "watch.user@gmail.com"
+    }
+  },
+  {
+    "body": {
+      "subject": "Operator javob bermayapti",
+      "body": "Yarim soatdan beri operatorni kutyapman. Xizmat sifati nol!",
+      "customer_email": "angry.client@mail.ru"
+    }
+  },
+  {
+    "body": {
+      "subject": "Справка о доходах",
+      "body": "Где в приложении скачать выписку для визы?",
+      "customer_email": "visa.applicant@yandex.ru"
+    }
+  },
+  {
+    "body": {
+      "subject": "Student loan",
+      "body": "Do you offer student loans with low interest?",
+      "customer_email": "student@wiut.uz"
+    }
+  },
+  {
+    "body": {
+      "subject": "Humo to Uzcard",
+      "body": "Humo dan Uzcard ga o'tkazma ishlamayapti. Qachon yonadi?",
+      "customer_email": "waiter@cafe.uz"
+    }
+  },
+  {
+    "body": {
+      "subject": "Ошибка 404",
+      "body": "При переходе на страницу акции выдает ошибку 404.",
+      "customer_email": "web.surfer@bk.ru"
+    }
+  },
+  {
+    "body": {
+      "subject": "Final Test",
+      "body": "Checking system integrity. End of batch.",
+      "customer_email": "sysadmin@localhost"
+    }
+  },
+  {
+    "body": {
+      "subject": "Hisob raqamimni unitdim",
+      "body": "Mening hisob raqamimni eslay olmayapman. Iltimos yordam bering.",
+      "customer_email": "forgotten.user@gmail.com"
+    }
+  },
+  {
+    "body": {
+      "subject": "Yangi karta buyurtma qilish",
+      "body": "Yangi Uzcard karta buyurtma qilmoqchiman. Narxi qancha va qancha vaqtda tayyor bo'ladi?",
+      "customer_email": "new.card@yandex.uz"
+    }
+  },
+  {
+    "body": {
+      "subject": "Ilova yangilanishi",
+      "body": "Ilovani yangiladim, lekin endi ishlamayapti. Nima qilish kerak?",
+      "customer_email": "update.fail@mail.ru"
+    }
+  },
+  {
+    "body": {
+      "subject": "Kredit to'lovi kechikdi",
+      "body": "Kredit to'lovimni bir kun kechiktirdim. Jarima to'lashim kerakmi?",
+      "customer_email": "late.payer@list.ru"
+    }
+  },
+  {
+    "body": {
+      "subject": "Valyuta ayirboshlash shoxobchasi",
+      "body": "Eng yaqin valyuta ayirboshlash shoxobchasi qayerda joylashgan?",
+      "customer_email": "exchange.seeker@gmail.com"
+    }
+  },
+  {
+    "body": {
+      "subject": "Bank kartasi yo'qoldi",
+      "body": "Bank kartamni yo'qotib qo'ydim. Qanday qilib uni bloklashim mumkin?",
+      "customer_email": "lost.card.user@yandex.ru"
+    }
+  }
+]

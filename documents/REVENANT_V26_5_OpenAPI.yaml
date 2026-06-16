@@ -1,0 +1,1926 @@
+openapi: 3.0.3
+
+info:
+  title: Project REVENANT – Zero-Trust AI Ticket Processing & Execution API
+  version: "26.5"
+  description: |
+    ## REVENANT V26.5 — Phase 3 Technical Proof
+
+    This specification documents the production-grade, zero-trust AI ticket processing pipeline
+    and deterministic orchestration layer designed for highly regulated banking ecosystems
+    operating under the supervision of the Central Bank of Uzbekistan (CBU).
+
+    ### Architecture Overview
+    The REVENANT pipeline is structured as a fail-closed, multi-block processing chain:
+
+    | Block | Name | Purpose |
+    |---|---|---|
+    | BLOCK 0 | Titanium Input Ingress | Sanitization, injection defense, PII redaction |
+    | BLOCK 1 | Enhanced Input & Security | Rate-limiting, biometric controller, envelope construction |
+    | BLOCK 2 | Enhanced Classification & Context | Language detection, text feature engineering, rule-based classification |
+    | BLOCK 3 | Enhanced Business Logic | SLA calculation, business impact (UZS), transition guard |
+    | BLOCK 4 | AI & Memory Context | Governance gate, LLM consensus engine, advisory labeler |
+    | BLOCK 5 | Approval & Dispatch | Channel arbitration, idempotent dispatch lock, Supabase state commit |
+    | BLOCK 6 | Memory Core | Vector embedding, Supabase RPC anomaly search, memory integrity guard |
+    | BLOCK 7 | Forensic Audit & Compliance | Trace initializer, invariant validator, PII scrubber, HMAC forensic signer, CBU compliance engine (LRU-1115 Article 14) |
+    | BLOCK 8 | Execution Contract | Execution contract builder, policy firewall (IRON HAND), human-in-the-loop gate |
+    | BLOCK 9 | Core Banking Trigger | Logic distributor, core banking API, alert dispatch |
+
+    ### Security Architecture
+    - **Fail-Closed**: Every gate defaults to `REJECT` on ambiguity or validation failure.
+    - **Zero-Trust**: Each block independently verifies the cryptographic seal from the previous block before proceeding.
+    - **Multi-LLM Consensus**: Both OpenAI (via OpenRouter) and Anthropic (via OpenRouter) must independently output matching structured JSON (`APPROVE`) before any money-movement contract transitions from `DRAFT` to `EXECUTE`. Disagreement or schema failure routes to a human-in-the-loop queue.
+    - **HMAC-SHA256 Forensic Sealing**: Every terminal state is signed using a server-held `HMAC_SECRET` (minimum 32 bytes). The signing occurs in BLOCK 7.6 (Forensic Signer) and is committed to the `audit_ledger` table in Supabase.
+    - **Constant-Time Verification**: All cryptographic comparisons in BLOCK 7.6 and the HMAC Verifier use constant-time buffer comparison to prevent timing-side-channel attacks.
+    - **Rate Limiting**: Enforced at BLOCK 1 ingress using a rolling 60-second window with a hard cap of 10 requests per source IP, implemented via n8n workflow static data.
+    - **PII Scrubbing**: BLOCK 7.4 (PII Forensic Scrubber) executes regex-based removal of UzCard/Humo card numbers (8600/5614 prefix), Uzbek passport identifiers, `+998` phone numbers, and email addresses before any data is committed to the audit ledger.
+    - **CBU Compliance**: BLOCK 7.8 (CBU Compliance Engine) auto-generates SAR XML per LRU-1115 Article 14 for any transaction at or above the $10,000 USD equivalent threshold and routes to the regulatory dashboard queue.
+
+    ### n8n Orchestration
+    The pipeline is orchestrated via n8n version 1 execution order. The entry webhook
+    (`f860224a-492d-454b-b3dc-0970fa48ad3a`) accepts POST requests and returns an immediate
+    `200 Queued` acknowledgment before async processing begins. All persistent state is held
+    in Supabase tables: `bank_approvals`, `bank_dispatch_logs`, `bank_memories`, and
+    `audit_ledger`.
+
+    ### CBU Compliance Statement
+    This API has been designed to satisfy CBU 25 BRV audit requirements. The
+    `/v1/revenant/ledger/verify` endpoint exposes the immutable forensic trail committed by
+    BLOCK 7.7 (Telemetry Sink) and signed by BLOCK 7.6 (Forensic Signer) for direct
+    inspection by CBU compliance officers.
+
+  contact:
+    name: REVENANT Systems Architecture Team
+    email: architecture@revenant.bank.uz
+  license:
+    name: Proprietary – Internal Use Only
+    url: https://internal.revenant.bank.uz/license
+
+servers:
+  - url: https://api.revenant.bank.uz
+    description: Production – Primary Region (Tashkent, UZ)
+  - url: https://api-dr.revenant.bank.uz
+    description: Production – Disaster Recovery Region
+
+tags:
+  - name: Ingestion
+    description: |
+      Webhook ingestion and ticket sanitization layer (BLOCK 0 – BLOCK 2).
+      All inbound traffic enters through this surface. The Titanium Input Ingress
+      Sanitization process is enforced unconditionally before any downstream processing
+      is permitted.
+  - name: Execution
+    description: |
+      Core banking execution gate (BLOCK 8 – BLOCK 9). Governs money-movement
+      and operational actions. Requires a valid pre-computed risk score from the
+      Master Triage Router and passing dual-independent multi-LLM consensus from
+      BLOCK 4 before any contract can transition to `EXECUTE` state.
+  - name: Audit
+    description: |
+      CBU-facing cryptographic audit trail (BLOCK 7). Read-only access to the
+      immutable forensic ledger committed by the Forensic Signer (BLOCK 7.6) and
+      Telemetry Sink (BLOCK 7.7). All entries are HMAC-SHA256 signed and include
+      temporal proof snapshots for non-repudiation.
+
+security:
+  - BearerAuth: []
+  - ApiKeyAuth: []
+
+paths:
+
+  /v1/revenant/ingest:
+    post:
+      operationId: ingestTicket
+      summary: Webhook – Zoomrad Support Ticket Ingestion
+      description: |
+        ## Titanium Input Ingress Sanitization Pipeline
+
+        This endpoint is the exclusive entry point for raw customer queries and transaction
+        anomaly tickets originating from the Zoomrad support platform. The request body is
+        subjected to the full BLOCK 0 → BLOCK 1 sanitization sequence before any downstream
+        enrichment or routing occurs.
+
+        ### Processing Sequence
+        1. **BLOCK 1 – PROD Input Normalizer (V26.5)**: Extracts source IP from `X-Real-IP`
+           header and enforces the rolling rate-limit window. If the per-IP counter exceeds
+           the hard cap of **10 requests per 60-second window**, the pipeline immediately returns
+           `429 Too Many Requests` and no further processing occurs.
+        2. **BLOCK 1 – Biometric Controller (V26)**: Evaluates `message_type` to determine
+           whether biometric liveness verification is required. Voice payloads bypass text
+           sanitization and enter the biometric challenge-response branch. Liveness check is
+           mandatory for `ingress_amount >= 10000`.
+        3. **BLOCK 0 – Titanium Sanitizer (V26.5)**: Executes the two-layer security scan:
+           - **Layer 1 – Prompt Injection Detection**: String-matches against a hardcoded
+             corpus of known jailbreak phrases (e.g., `ignore previous instructions`,
+             `system override`, `developer mode`). Match causes immediate `SECURITY_STOP`.
+           - **Layer 2 – Authority Poisoning Detection**: Regex-scans for fake email headers,
+             device signatures, reply-chain forgery, and authority role impersonation
+             (`admin`, `root`, `ceo`, `cfo`, `director`).
+        4. **BLOCK 0 – PII Hybrid Redactor**: Applies regex erasure for PANs (ISO 7812
+           format), IBANs, `+998`-prefix phone numbers, Uzbek passport identifiers
+           (`[A-Z]{2}[0-9]{7}`), and email addresses before the canonical ticket is
+           committed downstream.
+        5. **SB0 – Envelope Constructor**: Wraps the sanitized canonical ticket in a
+           versioned envelope with a `stage: SB0` marker and a monotonic `trace_id`. The
+           raw payload is purged (`__raw_data_purged: true`).
+        6. **Phase 0 Validation Gate**: Hard-validates the envelope for `trace_id` presence,
+           non-empty `subject` (max 500 characters), required fields, and CBU 25 BRV
+           compliance mapping. Failure emits a `400` structured error response.
+
+        ### Rate-Limit Header Semantics
+        The rolling window is implemented in n8n workflow static data keyed by source IP.
+        Expired entries (older than 60 seconds) are garbage-collected on every request.
+
+        | Header | Description |
+        |---|---|
+        | `X-RateLimit-Limit` | Hard cap: `10` |
+        | `X-RateLimit-Remaining` | Requests remaining in the current 60-second window for the source IP |
+        | `X-RateLimit-Reset` | Unix epoch (seconds) at which the window resets for the source IP |
+        | `Retry-After` | Present only on `429` responses; seconds until retry is permitted |
+
+        ### XSS, SQLi, and Prompt Injection Defense
+        The pipeline does **not** sanitize for XSS or SQLi at the HTTP layer (that
+        responsibility belongs to the API gateway). BLOCK 0 is specifically hardened against
+        **prompt injection** and **context poisoning** as those represent the attack surface
+        relevant to the LLM processing stages in BLOCK 4. XSS and SQLi attempts in the
+        payload body will be flagged under the generic `CONTENT_VIOLATION` error code and
+        blocked by the Layer 1 threat pattern scan if they contain injection syntax that
+        matches the known jailbreak corpus, and by the authority poisoning scan if they
+        contain HTML/SQL fragments matching the override patterns.
+
+      tags:
+        - Ingestion
+      parameters:
+        - $ref: '#/components/parameters/XRealIP'
+        - $ref: '#/components/parameters/XIdempotencyKey'
+        - $ref: '#/components/parameters/XRevenantVersion'
+      requestBody:
+        required: true
+        description: |
+          Raw Zoomrad support ticket payload. The `message_type` field governs whether
+          the ticket enters the text-processing branch (`text`) or the biometric
+          liveness branch (`voice`). The `biometrics` block is required when
+          `message_type` is `voice` or when `amount >= 10000`.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IngestRequest'
+            examples:
+              textTicket:
+                summary: Standard text ticket – payment anomaly
+                value:
+                  message_type: text
+                  subject: "To'lov amalga oshmadi – 500,000 UZS"
+                  body: "Kechagi tranzaksiya bajarilmadi. Humo kartasi 8600XXXXXXXX."
+                  customer_email: "abdullayev.j@client.uz"
+                  amount: 500000
+                  currency: UZS
+                  source_system: zoomrad
+                  origin_telemetry:
+                    ip_address: "91.185.18.22"
+                    user_agent: "Zoomrad/4.1.0 (Android)"
+                    geo_lat: 41.2995
+                    geo_lon: 69.2401
+              voiceTicket:
+                summary: Voice ticket with biometric payload
+                value:
+                  message_type: voice
+                  subject: "Voice query – balance check"
+                  body: ""
+                  customer_email: "vip_voice_user@bank.uz"
+                  amount: 15000
+                  currency: USD
+                  source_system: zoomrad
+                  biometrics:
+                    audio_base64: "<base64_encoded_audio>"
+                    mime_type: audio/ogg
+                    context:
+                      device_id: "dev_a1b2c3"
+                      platform: android
+      responses:
+        '200':
+          description: |
+            Ticket accepted and queued for asynchronous processing. An immediate
+            acknowledgment is returned before the pipeline begins. The `trace_id`
+            returned here is the canonical identifier for all downstream audit queries.
+          headers:
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/XRateLimitLimit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/XRateLimitRemaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/XRateLimitReset'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngestAccepted'
+              example:
+                status: queued
+                message: Ticket accepted
+                trace_id: "a3f7c912-d844-4e1b-b29a-0f88ea1c3b56"
+        '400':
+          description: |
+            Validation failed at the Phase 0 Validation Gate or SB0 Envelope Constructor.
+            This response is emitted by the **Return Validation Error** node (HTTP 400)
+            and corresponds to one or more of the following conditions:
+            - `MISSING_TRACE_ID` / `EMPTY_TRACE_ID`
+            - `MISSING_SUBJECT` / `EMPTY_SUBJECT` / `SUBJECT_TOO_LONG` (> 500 chars)
+            - `MISSING_REQUIRED_FIELD`
+            - `CBU_COMPLIANCE_MAPPING_FAILED`
+            - `CONTENT_VIOLATION` – XSS, SQLi, or prompt injection pattern detected by
+              the Titanium Sanitizer BLOCK 0 Layer 1 (prompt injection) or Layer 2
+              (authority/context poisoning)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+              examples:
+                promptInjection:
+                  summary: Layer 1 prompt injection blocked
+                  value:
+                    status: error
+                    message: "Validation failed – terminal exit"
+                    error_code: CONTENT_VIOLATION
+                    sub_code: PROMPT_INJECTION
+                    trace_id: "blocked-a1b2c3d4"
+                    stage: SB1
+                    timestamp: "2025-06-01T10:22:33.000Z"
+                contextPoisoning:
+                  summary: Layer 2 authority poisoning blocked
+                  value:
+                    status: error
+                    message: "Validation failed – terminal exit"
+                    error_code: CONTENT_VIOLATION
+                    sub_code: CONTEXT_POISONING
+                    trace_id: "blocked-b5c6d7e8"
+                    stage: SB1
+                    timestamp: "2025-06-01T10:23:00.000Z"
+                missingSubject:
+                  summary: Required field absent
+                  value:
+                    status: error
+                    message: "Validation failed – terminal exit"
+                    error_code: SB1_VALIDATION_TERMINAL
+                    sub_code: MISSING_SUBJECT
+                    trace_id: "trace_00112233"
+                    stage: SB1
+                    timestamp: "2025-06-01T10:24:00.000Z"
+        '422':
+          description: |
+            The payload structure is syntactically valid but semantically unprocessable.
+            Returned when the CBU 25 BRV compliance mapping cannot be resolved, or when the
+            biometric liveness check is required but the `biometrics` block is absent for a
+            high-value transaction (`amount >= 10000`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SemanticError'
+        '429':
+          description: |
+            Rate limit exceeded. The source IP has surpassed the hard cap of **10 requests
+            per 60-second rolling window** enforced by the BLOCK 1 PROD Input Normalizer
+            (V26.5) rate limiter. The pipeline returns immediately with no further
+            processing. The `Retry-After` header specifies the number of seconds remaining
+            until the window resets for the requesting IP.
+          headers:
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/XRateLimitLimit'
+            X-RateLimit-Remaining:
+              schema:
+                type: integer
+                example: 0
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/XRateLimitReset'
+            Retry-After:
+              description: Seconds until the rate-limit window resets for the requesting IP.
+              schema:
+                type: integer
+                example: 47
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RateLimitError'
+              example:
+                status: REJECTED
+                error_code: RATE_LIMIT_EXCEEDED
+                message: "Too many requests from this IP."
+                trace_id: "blocked-ff001122"
+                retry_after_seconds: 47
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/revenant/contract/execute:
+    post:
+      operationId: executeContract
+      summary: Block 9 – Core Banking Execution Trigger
+      description: |
+        ## MONEY-PHASE Execution Gate
+
+        This endpoint is the terminal, privileged execution surface for money-movement and
+        operational actions. It is structurally immutable: no contract can reach the
+        Core Banking API (BLOCK 9.3) without passing every preceding gate in sequence.
+
+        ### Mandatory Pre-Conditions (Fail-Closed)
+        All conditions below are enforced deterministically. Failure at any point
+        causes an immediate halt with no partial state committed.
+
+        **1. Pre-computed Risk Score (Master Triage Router)**
+        The request body **must** contain a `triage_risk_score` field populated by the
+        REVENANT Master Triage Router (BLOCK 2). This score is the output of the weighted
+        multi-factor risk model:
+        - Amount risk (weight 0.40): Linear scale up to the 50,000,000 UZS hard block ceiling.
+        - Geo risk (weight 0.25): Haversine distance between the declared user location and
+          the device location. Threshold: 100 km. Breach yields a score component of 100.
+        - Velocity risk (weight 0.20): Requests per hour against a maximum of 60.
+        - Device trust risk (weight 0.15): Derived from the device trust score inverse.
+
+        **2. Phase 3.7 Final Execution Seal**
+        The request envelope must carry a valid `_phase_3_7.final_execution_seal` object
+        with `phase_3_complete: true`, `lock_status: LOCKED_COMPLIANT`, and
+        `scope_lock_status: ENFORCED_COMPLIANT`. The Governance Gate (BLOCK 4) throws
+        `GOVERNANCE_BREACH` and halts execution if this seal is absent.
+
+        **3. Dual-Independent Multi-LLM Consensus (BLOCK 4)**
+        Two independent LLM calls are dispatched in parallel:
+        - **OpenAI** via `openrouter.ai/api/v1/chat/completions` (model: `gpt-4o-mini`,
+          timeout: 15,000 ms, temperature: 0.2, safety: STRICT_V2)
+        - **Anthropic** via `openrouter.ai/api/v1/chat/completions` (Anthropic model,
+          timeout: 15,000 ms)
+
+        Each model must return a schema-valid JSON object:
+        ```json
+        { "action": "APPROVE", "confidence": <0.0–1.0>, "rules_triggered": ["..."] }
+        ```
+        The Consensus Engine Validator (BLOCK 4) applies the following logic:
+
+        | OpenAI Result | Anthropic Result | Consensus | HTTP Outcome |
+        |---|---|---|---|
+        | `APPROVE` | `APPROVE` | `APPROVED` | Contract → `EXECUTE` |
+        | `DENY` | any | `DENIED` | `422` → Human Review Queue |
+        | any | `DENY` | `DENIED` | `422` → Human Review Queue |
+        | Schema failure | Schema failure | `ESCALATE_TO_HUMAN` | `422` → Human Review Queue |
+        | Schema failure | valid | `SINGLE_PROVIDER_FALLBACK` | `422` → Human Review Queue |
+        | valid | Schema failure | `SINGLE_PROVIDER_FALLBACK` | `422` → Human Review Queue |
+
+        The consensus verdict, both raw LLM response hashes (SHA-256 of canonical JSON),
+        and the `rules_triggered` arrays from both providers are embedded in the
+        `ForensicSeal` and committed to the audit ledger.
+
+        **4. BLOCK 8.2 – Execution Policy Firewall (IRON HAND)**
+        Enforces hard financial invariants:
+        - Hard ceiling: **$50,000 USD equivalent**. Amounts at or above this value are
+          unconditionally `REJECTED` regardless of LLM consensus.
+        - Currency guard: Only `USD` and `UZS` are accepted. Unknown currencies are
+          immediately `REJECTED` with `EPF_VIOLATION: Unsupported currency`.
+        - Math integrity guard: NaN or Infinity resulting from malformed `amount_atomic`
+          inputs are immediately `REJECTED` with `EPF_VIOLATION: CRITICAL MATH ANOMALY`.
+
+        **5. BLOCK 8.3 – Human-in-the-Loop Gate**
+        Contracts with `amount >= $10,000 USD equivalent` or where SAR filing has been
+        triggered by BLOCK 7.8 (CBU Compliance Engine) are unconditionally routed to the
+        human approval queue (Telegram inline keyboard). The gate defines a 15-minute
+        zombie-killing timeout (`max_wait_ms: 900000`, strategy: `AUTO_REJECT`).
+
+        **6. BLOCK 8.1 – Execution Contract Immutability**
+        The execution contract (`contract_id` = `exec_<trace_id>`) is cryptographically
+        bound at creation. The `idempotence_key` (SHA-256 of
+        `approval_id:channel:trace_id:advisory_hash`) prevents duplicate execution.
+        The Supabase `bank_dispatch_logs` table enforces `on_conflict` merge-duplicate
+        protection at the database layer.
+
+      tags:
+        - Execution
+      parameters:
+        - $ref: '#/components/parameters/XIdempotencyKey'
+        - $ref: '#/components/parameters/XRevenantVersion'
+        - $ref: '#/components/parameters/XPhaseSealhash'
+      requestBody:
+        required: true
+        description: |
+          Execution contract payload. Must include the pre-computed triage risk score,
+          the Phase 3.7 execution seal, and the approval record from BLOCK 5
+          (Approval & Dispatch). All fields are validated against the `CanonicalTicket`
+          schema before the contract proceeds to the policy firewall.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecutionRequest'
+            examples:
+              standardTransfer:
+                summary: Approved transfer within limits
+                value:
+                  trace_id: "a3f7c912-d844-4e1b-b29a-0f88ea1c3b56"
+                  approval_id: "apr_a3f7c912d8444e1bb29a0f88ea1c3b56"
+                  triage_risk_score: 22.5
+                  canonical_ticket:
+                    trace_id: "a3f7c912-d844-4e1b-b29a-0f88ea1c3b56"
+                    subject: "Transfer request 500 USD"
+                    severity: medium
+                    classification:
+                      intent: payment_issue
+                      confidence: 0.92
+                  execution_intent:
+                    target_tool: transfer_internal
+                    amount_atomic: 50000
+                    currency: USD
+                    description: "Transfer request 500 USD"
+                  phase_3_7_seal:
+                    phase_3_complete: true
+                    lock_status: LOCKED_COMPLIANT
+                    scope_lock_status: ENFORCED_COMPLIANT
+                    seal_hash: "e3b0c44298fc1c149afb4c8996fb92427ae41e4649b934ca495991b7852b855"
+      responses:
+        '200':
+          description: |
+            Contract executed successfully. The Core Banking API (BLOCK 9.3) accepted
+            the transfer. The `forensic_seal` embedded in the response is the HMAC-SHA256
+            signed record committed to the `audit_ledger` table. This seal constitutes the
+            cryptographic proof of execution for CBU audit purposes.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionSuccess'
+              example:
+                status: EXECUTED
+                contract_id: "exec_a3f7c912-d844-4e1b-b29a-0f88ea1c3b56"
+                trace_id: "a3f7c912-d844-4e1b-b29a-0f88ea1c3b56"
+                message_to_user: "✅ Transaction Authorized. Processing now..."
+                core_banking_response:
+                  action: TRANSFER
+                  amount: 50000
+                  status: COMPLETED
+                  trace_id: "exec_a3f7c912-d844-4e1b-b29a-0f88ea1c3b56"
+                forensic_seal:
+                  $ref: '#/components/schemas/ForensicSeal'
+        '402':
+          description: |
+            Insufficient funds or core banking system rejection. The Core Banking API
+            (BLOCK 9.3) returned a non-success response. No state has been mutated in
+            `bank_approvals` or `bank_dispatch_logs`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionRejected'
+        '403':
+          description: |
+            Governance breach detected. The Phase 3.7 Final Execution Seal is absent,
+            invalid, or does not satisfy all three compliance conditions
+            (`phase_3_complete`, `lock_status: LOCKED_COMPLIANT`,
+            `scope_lock_status: ENFORCED_COMPLIANT`). The Governance Gate (BLOCK 4) has
+            halted execution with `GOVERNANCE_BREACH`. A Telegram security alert is
+            dispatched to the operations channel.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernanceBreach'
+              example:
+                status: REJECTED
+                error_code: GOVERNANCE_BREACH
+                message: "Block 4 entry attempted without Phase 3.7 Seal."
+                trace_id: "a3f7c912-d844-4e1b-b29a-0f88ea1c3b56"
+                timestamp: "2025-06-01T10:30:00.000Z"
+        '409':
+          description: |
+            Duplicate execution detected. The `idempotence_key` derived from
+            `SHA-256(approval_id:channel:trace_id:advisory_hash)` already exists in the
+            `bank_dispatch_logs` table with `status != locked`. The system has halted to
+            prevent double-spend. A `HALTED_DUPLICATE` record is written to the dispatch
+            log and a Telegram security alert is dispatched.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DuplicateExecution'
+              example:
+                status: halted
+                reason: duplicate_request
+                trace_id: "a3f7c912-d844-4e1b-b29a-0f88ea1c3b56"
+                meta:
+                  system: Guardian-V1
+                  forensic_hash: "e3b0c44298fc1c149afb4c8996fb92427ae41e4649b934ca495991b7852b855"
+                message: "Transaction already under processing or archived."
+        '422':
+          description: |
+            ## Consensus Failure – Human-in-the-Loop Queue
+
+            Execution has been suspended because the dual-independent multi-LLM consensus
+            engine (BLOCK 4) did not return a unanimous `APPROVE` verdict. This is the
+            primary safety gate for the MONEY-PHASE.
+
+            All `422` responses from this endpoint route the ticket to the human-in-the-loop
+            manual review queue. A Telegram inline keyboard message is dispatched to the
+            designated approver via BLOCK 9.2 (Human Approval Request).
+
+            ### Consensus Failure Codes
+
+            | `consensus_state` | Meaning |
+            |---|---|
+            | `DENIED` | One or both LLMs returned `DENY` |
+            | `ESCALATE_TO_HUMAN` | Both LLMs failed schema validation or timed out |
+            | `SINGLE_PROVIDER_FALLBACK` | One LLM failed; single-provider decision is insufficient |
+            | `EPF_VIOLATION` | Policy Firewall (IRON HAND) blocked: amount ceiling, currency, or math anomaly |
+            | `SAR_TRIGGERED` | CBU Compliance Engine (BLOCK 7.8) flagged for SAR filing |
+
+            The `review_queue_id` in the response body is the Supabase `bank_approvals`
+            `approval_id` for the created pending record. The approver will receive a
+            Telegram message with the `exec_approve_<contract_id>` and
+            `exec_block_<contract_id>` callback buttons.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsensusFailure'
+              examples:
+                consensusDenied:
+                  summary: Both LLMs returned DENY
+                  value:
+                    status: PAUSED
+                    error_code: CONSENSUS_DENIED
+                    consensus_state: DENIED
+                    message: "Transaction routed to human review queue."
+                    review_queue_id: "apr_b7c8d9e0f1a24b3c"
+                    trace_id: "a3f7c912-d844-4e1b-b29a-0f88ea1c3b56"
+                    llm_summary:
+                      openai_action: DENY
+                      anthropic_action: DENY
+                      rules_triggered: ["AML_VELOCITY_BREACH", "GEO_ANOMALY"]
+                    timeout_config:
+                      max_wait_ms: 900000
+                      strategy: AUTO_REJECT
+                      expires_at: "2025-06-01T10:45:00.000Z"
+                policyFirewall:
+                  summary: IRON HAND – amount ceiling exceeded
+                  value:
+                    status: STOP
+                    error_code: EPF_VIOLATION
+                    consensus_state: EPF_VIOLATION
+                    message: "Value $52,000.00 exceeds hard ceiling of $50,000."
+                    trace_id: "c4d5e6f7-a8b9-4c0d-1e2f-3a4b5c6d7e8f"
+                    forensic_flag: true
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/revenant/ledger/verify:
+    get:
+      operationId: verifyLedgerEntry
+      summary: CBU Audit – Cryptographic Ledger Verification
+      description: |
+        ## Immutable Forensic Ledger – CBU Compliance Surface
+
+        This endpoint exposes the immutable forensic audit trail to Central Bank of
+        Uzbekistan (CBU) compliance officers. It is a read-only interface over the
+        `audit_ledger` Supabase table, which is populated exclusively by BLOCK 7.7
+        (Telemetry Sink) and is never mutated after initial write.
+
+        ### Cryptographic Verification Process
+
+        **1. Retrieval**: The `audit_ledger` row is fetched by `transaction_id`
+        (= `trace_id`) via Supabase REST API.
+
+        **2. SHA-256 Hash Reconstruction**: The server reconstructs the HMAC-SHA256
+        signature by:
+        - Assembling the canonical `logManifest` object (trace_id, system_version,
+          seal_version, timestamp, decision, net_savings_uzs, validation_status,
+          temporal_proof, data_payload_hash) in deterministic key-sorted JSON.
+        - Computing `HMAC-SHA256(canonical_manifest_string, HMAC_SECRET)`.
+
+        **3. Constant-Time Verification**: The reconstructed signature is compared
+        against the stored `forensic_signature` using a constant-time buffer comparison
+        (`crypto.timingSafeEqual`) to prevent timing side-channel attacks. The
+        verification result is returned as a discrete boolean status field
+        (`signature_valid`) and never as a string that could be bypassed by type coercion.
+
+        **4. Temporal Proof**: The `temporal_proof` block embedded in the ledger entry
+        captures the exact model configuration (`gpt-4o-mini`, temperature 0.2,
+        safety `STRICT_V2`), an SHA-256 hash of the input intent state the AI evaluated
+        (`input_state_hash`), and the policy version at time of signing
+        (`Revenant_v26.5_Article14`). This enables future audit replay.
+
+        **5. Consensus Proof**: The `llm_consensus_state` block contains the verbatim
+        action and confidence from both the OpenAI and Anthropic LLM calls, the
+        `consensus_hash` (SHA-256 of the canonical consensus object), and the full
+        `rules_triggered` arrays from both providers.
+
+        **6. Supabase Anomaly Cross-Reference**: The `rpc_memory_crossref_id` field
+        references the Supabase RPC call (`match_bank_memories`) executed in BLOCK 6.
+        This ID links the execution to the vector-similarity memory search that confirmed
+        or denied the presence of historical precedents for the transaction pattern.
+
+        ### CBU 25 BRV Compliance
+        Each ledger entry maps to the CBU 25 BRV standard fields:
+        - Originating institution identifier
+        - Transaction classification code
+        - Jurisdictional flags (`.uz` domain routing)
+        - SAR status from BLOCK 7.8 CBU Compliance Engine (LRU-1115 Article 14)
+        - PII scrub confirmation and scrub count
+
+      tags:
+        - Audit
+      parameters:
+        - name: transaction_id
+          in: query
+          required: true
+          description: |
+            The canonical `trace_id` assigned at BLOCK 1 ingestion. This value is
+            immutable across all pipeline stages. It is the primary key for the
+            `audit_ledger` table and the `bank_approvals` table. Format: UUID v4 or
+            the `blocked-<hex>` prefix format emitted for rate-limited requests.
+          schema:
+            type: string
+            format: uuid
+            example: "a3f7c912-d844-4e1b-b29a-0f88ea1c3b56"
+        - name: include_temporal_proof
+          in: query
+          required: false
+          description: |
+            When `true`, the response includes the full `temporal_proof` block from the
+            BLOCK 7.6 Forensic Signer, including the model configuration snapshot and the
+            `input_state_hash`. Defaults to `false` to minimize response payload size for
+            standard audits. CBU officers should set this to `true` for dispute resolution.
+          schema:
+            type: boolean
+            default: false
+        - name: include_pii_audit
+          in: query
+          required: false
+          description: |
+            When `true`, the response includes the PII scrub audit block from BLOCK 7.4,
+            showing the number of PII tokens redacted and the category breakdown
+            (card numbers, phone numbers, passport IDs, emails). The actual redacted
+            values are never returned.
+          schema:
+            type: boolean
+            default: false
+        - $ref: '#/components/parameters/XRevenantVersion'
+      responses:
+        '200':
+          description: |
+            Forensic ledger entry retrieved and cryptographically verified. The
+            `signature_valid` field authoritatively confirms whether the stored entry
+            has been tampered with since it was committed by BLOCK 7.6 (Forensic Signer).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LedgerVerificationResponse'
+              example:
+                transaction_id: "a3f7c912-d844-4e1b-b29a-0f88ea1c3b56"
+                signature_valid: true
+                verification_performed_at: "2025-06-01T11:00:00.000Z"
+                forensic_seal:
+                  execution_timestamp: "2025-06-01T10:30:05.000Z"
+                  trace_id: "a3f7c912-d844-4e1b-b29a-0f88ea1c3b56"
+                  system_version: "v26.5-hardened"
+                  seal_version: "3.1-HMAC-SHA256"
+                  decision: APPROVED
+                  net_savings_uzs: 10000
+                  validation_status: PASSED
+                  sha256_transaction_hash: "e3b0c44298fc1c149afb4c8996fb92427ae41e4649b934ca495991b7852b855"
+                  forensic_signature: "hmac_sha256_hex_value_here"
+                  data_payload_hash: "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b"
+                  llm_consensus_state:
+                    consensus: APPROVED
+                    openai_action: APPROVE
+                    openai_confidence: 0.94
+                    anthropic_action: APPROVE
+                    anthropic_confidence: 0.91
+                    openai_rules_triggered: []
+                    anthropic_rules_triggered: []
+                    consensus_hash: "a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3"
+                  rpc_memory_crossref_id: "rpc_match_a3f7c912_1748772605000"
+                  temporal_proof:
+                    model_config:
+                      engine: "gpt-4o-mini"
+                      temperature: 0.2
+                      safety_settings: "STRICT_V2"
+                    input_state_hash: "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+                    policy_version: "Revenant_v26.5_Article14"
+                    timestamp_ms: 1748772605000
+                  cbu_compliance:
+                    cbv_25_brv_mapped: true
+                    sar_required: false
+                    regulatory_action: NONE
+                    jurisdictional_flags: ["JURISD_UZ"]
+        '404':
+          description: |
+            No ledger entry found for the supplied `transaction_id`. The transaction
+            either was not processed through the full pipeline (e.g., it was blocked at
+            BLOCK 0 or BLOCK 1 before a forensic seal was issued), or the `transaction_id`
+            is incorrect.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFound'
+              example:
+                status: not_found
+                error_code: LEDGER_ENTRY_NOT_FOUND
+                message: "No forensic ledger entry exists for the provided transaction_id."
+                transaction_id: "00000000-0000-0000-0000-000000000000"
+        '403':
+          description: |
+            The requesting principal does not have `cbu_audit` scope in their bearer token.
+            CBU compliance officers must present a token with the `role: cbu_compliance_officer`
+            claim issued by the REVENANT identity provider.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessDenied'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT issued by the REVENANT identity provider. Required claims:
+        - `sub`: Principal identifier
+        - `role`: One of `zoomrad_ingest`, `core_banking_ops`, `cbu_compliance_officer`
+        - `exp`: Expiration (maximum validity: 3600 seconds)
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Revenant-Api-Key
+      description: |
+        Static API key for machine-to-machine integrations (n8n webhook triggers).
+        Must be stored in n8n variable `REVENANT_API_KEY`. Rotation cycle: 90 days.
+
+  parameters:
+    XRealIP:
+      name: X-Real-IP
+      in: header
+      required: false
+      description: |
+        Source IP address forwarded by the API gateway or load balancer. Used by the
+        BLOCK 1 PROD Input Normalizer rate limiter to key the per-IP request counter.
+        If absent, the normalizer falls back to `"unknown_ip"`, which means all
+        requests without this header share a single rate-limit bucket.
+      schema:
+        type: string
+        format: ipv4
+        example: "91.185.18.22"
+    XIdempotencyKey:
+      name: X-Idempotency-Key
+      in: header
+      required: false
+      description: |
+        Client-supplied idempotency key. If provided, it is used as the base for the
+        `idempotence_key` computation in BLOCK 5 (Channel Arbitration Engine). If absent,
+        the system derives the key as `SHA-256(approval_id:channel:trace_id:advisory_hash)`.
+        Prevents duplicate dispatch on network retry.
+      schema:
+        type: string
+        maxLength: 128
+        example: "client-idempotency-key-abc123"
+    XRevenantVersion:
+      name: X-Revenant-Version
+      in: header
+      required: false
+      description: |
+        Requested pipeline version. The server always processes at the deployed version
+        (V26.5). This header is recorded in the audit ledger `metadata.version` field
+        for traceability. Mismatches are logged but do not cause rejection.
+      schema:
+        type: string
+        example: "26.5"
+    XPhaseSealhash:
+      name: X-Phase-Seal-Hash
+      in: header
+      required: true
+      description: |
+        The SHA-256 seal hash emitted by the Phase 3.7 Final Execution Seal node. This
+        value is cross-validated against the `phase_3_7_seal.seal_hash` field in the
+        request body. A mismatch causes an immediate `403 Governance Breach` response.
+        Enforces that the execution request originates from a legitimately sealed
+        BLOCK 4 advisory and has not been crafted externally.
+      schema:
+        type: string
+        pattern: "^[a-f0-9]{64}$"
+        example: "e3b0c44298fc1c149afb4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+  headers:
+    XRateLimitLimit:
+      description: The maximum number of requests permitted per 60-second rolling window per source IP.
+      schema:
+        type: integer
+        example: 10
+    XRateLimitRemaining:
+      description: Requests remaining in the current window for the source IP.
+      schema:
+        type: integer
+        example: 7
+    XRateLimitReset:
+      description: Unix epoch timestamp (seconds) at which the current window resets.
+      schema:
+        type: integer
+        format: int64
+        example: 1748775660
+
+  responses:
+    InternalError:
+      description: |
+        An unhandled exception occurred within the n8n pipeline. The error has been
+        captured by the Emergency Log node (BLOCK 3) and an incident notification has
+        been dispatched via Gmail to the configured operations address. Retry with
+        exponential back-off. If the error persists, reference the `trace_id` in the
+        response body when contacting the operations team.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/InternalError'
+
+  schemas:
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # REQUEST SCHEMAS
+    # ─────────────────────────────────────────────────────────────────────────
+
+    IngestRequest:
+      type: object
+      required:
+        - message_type
+        - subject
+        - customer_email
+        - source_system
+      description: |
+        Raw inbound ticket payload from the Zoomrad support platform. All fields are
+        subjected to the BLOCK 0 Titanium Sanitizer before being written to the
+        canonical ticket structure. The `biometrics` block is conditionally required
+        when `message_type` is `voice` or when `amount >= 10000`.
+      properties:
+        message_type:
+          type: string
+          enum: [text, voice]
+          description: |
+            Governs the processing branch. `text` tickets proceed through the standard
+            sanitization and NLP pipeline. `voice` tickets are routed to the Biometric
+            Controller (BLOCK 1) for challenge-response liveness verification before
+            any text content is extracted.
+          example: text
+        subject:
+          type: string
+          maxLength: 500
+          description: |
+            Ticket subject line. Maximum 500 characters (enforced at Phase 0 Validation
+            Gate with error code `SUBJECT_TOO_LONG`). Must be non-empty. May be in
+            Uzbek (Latin or Cyrillic), Russian, or English; the Language Detection Engine
+            (BLOCK 2, V20) will classify the primary language and set `language_analysis.detected`.
+          example: "To'lov amalga oshmadi – 500,000 UZS"
+        body:
+          type: string
+          description: |
+            Full ticket body. Scanned for prompt injection (Layer 1) and authority
+            poisoning (Layer 2) by the Titanium Sanitizer. May be empty for `voice`
+            messages where transcription is pending (`status: MISSING_TEXT_FOR_ANALYSIS`
+            triggers the `is_voice_fallback` flag in language analysis).
+          example: "Kechagi tranzaksiya bajarilmadi."
+        customer_email:
+          type: string
+          format: email
+          description: |
+            Customer identifier. Used as the `user_id` for vector memory lookups in
+            BLOCK 6 (Supabase RPC `match_bank_memories`). The email domain (`.uz` suffix)
+            triggers the `JURISD_UZ` jurisdictional flag in the Governance Gate (BLOCK 4),
+            applying Uzbekistan-specific CBU routing rules. The BLOCK 7.4 PII Forensic
+            Scrubber will redact this value before it is committed to the audit ledger.
+          example: "abdullayev.j@client.uz"
+        amount:
+          type: number
+          format: float
+          minimum: 0
+          description: |
+            Transaction amount in the currency specified by `currency`. Used by:
+            - BLOCK 1 Biometric Controller: Liveness check required if `>= 10000` (any currency).
+            - BLOCK 2 Master Triage Router: Amount risk component (weight 0.40 of composite risk score).
+            - BLOCK 7.8 CBU Compliance Engine: SAR threshold check (`>= $10,000 USD equivalent`).
+            - BLOCK 8.1 Execution Contract Builder: Human gate trigger (`>= $10,000 USD equivalent`).
+            - BLOCK 8.2 Execution Policy Firewall: Hard ceiling check (`>= $50,000 USD equivalent`).
+          example: 500000
+        currency:
+          type: string
+          enum: [UZS, USD]
+          description: |
+            Transaction currency. The Execution Policy Firewall (BLOCK 8.2, IRON HAND)
+            accepts only `UZS` and `USD`. Requests with any other currency are
+            unconditionally rejected with `EPF_VIOLATION: Unsupported currency`.
+            UZS-to-USD conversion uses the rate in n8n variable `UZS_EXCHANGE_RATE`
+            (default: 12,850 UZS/USD).
+          example: UZS
+        source_system:
+          type: string
+          description: Originating platform identifier. Recorded in the canonical ticket for audit.
+          example: zoomrad
+        origin_telemetry:
+          $ref: '#/components/schemas/OriginTelemetry'
+        biometrics:
+          $ref: '#/components/schemas/BiometricPayload'
+
+    ExecutionRequest:
+      type: object
+      required:
+        - trace_id
+        - approval_id
+        - triage_risk_score
+        - canonical_ticket
+        - execution_intent
+        - phase_3_7_seal
+      description: |
+        Execution contract payload. Must originate from a fully processed BLOCK 5
+        approval. Unauthorized direct construction of this payload without a valid
+        `phase_3_7_seal` will result in a `403 Governance Breach`.
+      properties:
+        trace_id:
+          type: string
+          format: uuid
+          description: |
+            Canonical pipeline trace identifier. Must match the `trace_id` in
+            `canonical_ticket` and the `approval_id` record in Supabase
+            `bank_approvals`. Any mismatch triggers `TRACE_ID_MISMATCH` and halts execution.
+        approval_id:
+          type: string
+          description: |
+            Supabase `bank_approvals` record identifier. Derived deterministically as
+            the HMAC-SHA256 of `trace_id:advisory_hash` to enforce idempotency.
+            A consumed approval (`consumed: true`) will cause a `409 Duplicate Execution`.
+        triage_risk_score:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+          description: |
+            Pre-computed composite risk score (0–100) from the Master Triage Router
+            (BLOCK 2). Calculated as the weighted sum:
+            `(amount_risk * 0.40) + (geo_risk * 0.25) + (velocity_risk * 0.20) + (device_risk * 0.15)`.
+            The consensus engine prompt embeds this score for LLM evaluation. Scores above
+            the configured threshold trigger the `TRANSACTION` required-fields validation.
+          example: 22.5
+        canonical_ticket:
+          $ref: '#/components/schemas/CanonicalTicket'
+        execution_intent:
+          type: object
+          required:
+            - target_tool
+            - amount_atomic
+            - currency
+          description: |
+            Execution parameters for the Core Banking API (BLOCK 9.3). The `amount_atomic`
+            field is in base units (e.g., cents: 50000 = $500.00). The Execution Policy
+            Firewall divides by 100 before performing the USD ceiling check.
+          properties:
+            target_tool:
+              type: string
+              enum: [transfer_internal, balance_inquiry, account_freeze, account_unfreeze]
+              description: The core banking operation to execute.
+            amount_atomic:
+              type: integer
+              description: Amount in smallest base units (e.g., cents or tiyin).
+              example: 50000
+            currency:
+              type: string
+              enum: [USD, UZS]
+              example: USD
+            description:
+              type: string
+              maxLength: 255
+              description: Human-readable description committed to the core banking ledger.
+        phase_3_7_seal:
+          type: object
+          required:
+            - phase_3_complete
+            - lock_status
+            - scope_lock_status
+            - seal_hash
+          description: |
+            Cryptographic proof that BLOCK 3 and BLOCK 4 processing completed
+            successfully and all invariants were satisfied. Constructed by the Phase 3.7
+            Final Execution Seal node. Absence or invalidity triggers `403 Governance Breach`.
+          properties:
+            phase_3_complete:
+              type: boolean
+              enum: [true]
+              description: Must be `true`. Any other value is a governance breach.
+            lock_status:
+              type: string
+              enum: [LOCKED_COMPLIANT]
+              description: Memory contract lock status. Must be `LOCKED_COMPLIANT`.
+            scope_lock_status:
+              type: string
+              enum: [ENFORCED_COMPLIANT]
+              description: Scope enforcement guard status. Must be `ENFORCED_COMPLIANT`.
+            seal_hash:
+              type: string
+              pattern: "^[a-f0-9]{64}$"
+              description: |
+                SHA-256 hash of the serialized Phase 3.7 seal state. Must match the
+                `X-Phase-Seal-Hash` request header. Computed by the Phase 3.7 Final
+                Execution Seal node using `crypto.createHash('sha256')`.
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # CORE DOMAIN SCHEMAS
+    # ─────────────────────────────────────────────────────────────────────────
+
+    CanonicalTicket:
+      type: object
+      description: |
+        ## Canonical Ticket Schema
+
+        The deeply nested, sanitized JSON structure representing the cleaned input as it
+        exits the BLOCK 0 Titanium Sanitizer. All upstream raw fields have been purged
+        (`__raw_data_purged: true`). This object is immutable from the point it is
+        sealed by the SB0 Envelope Constructor; downstream nodes may annotate it but
+        may not modify its phase-0 core fields.
+
+        ### Immutable Phase 0 Fields
+        The following fields are set at BLOCK 0 and are guaranteed to be present and
+        unchanged at all downstream stages: `trace_id`, `subject`, `body`,
+        `customer_email`, `transaction_amount`, `webhook_received_at`.
+
+        ### CBU 25 BRV Compliance Mapping
+        The `cbu_compliance` sub-object maps every required CBU 25 BRV audit field.
+        The `compliance_mapped` flag must be `true` before the ticket can proceed past
+        the Phase 0 Validation Gate.
+
+        ### Trilingual Processing
+        The Language Detection Engine (BLOCK 2, V20) classifies each ticket as `uz`
+        (Uzbek Latin), `uz_cyrillic` (Uzbek Cyrillic), `ru` (Russian), or `en` (English).
+        The `translated_intent` field normalizes intent terminology across all three
+        language families for deterministic downstream classification.
+
+        ### Haversine Geographic Risk
+        The `geo_risk` sub-object exposes the Haversine distance (km) between the
+        declared user location (`origin_telemetry.geo_lat`, `origin_telemetry.geo_lon`)
+        and the device location derived from the IP geolocation. Distances exceeding
+        100 km produce a geo risk score component of 100 (maximum) in the Master Triage
+        Router.
+      required:
+        - trace_id
+        - subject
+        - customer_email
+        - webhook_received_at
+      properties:
+        trace_id:
+          type: string
+          format: uuid
+          description: |
+            Immutable canonical identifier assigned at ingestion by the PROD Input
+            Normalizer. Constructed as `SHA-256(ip + timestamp + body_hash)` to ensure
+            uniqueness. Used as the primary key across `bank_approvals`,
+            `bank_dispatch_logs`, and `audit_ledger` tables.
+          example: "a3f7c912-d844-4e1b-b29a-0f88ea1c3b56"
+        subject:
+          type: string
+          maxLength: 500
+          description: Sanitized ticket subject. Raw XSS/injection characters have been neutralized.
+        body:
+          type: string
+          description: Sanitized ticket body. Prompt injection patterns have been removed.
+        customer_email:
+          type: string
+          format: email
+          description: |
+            Customer email. Preserved in the canonical ticket for routing and memory
+            lookup. Redacted in the forensic ledger by BLOCK 7.4 (PII Forensic Scrubber)
+            before audit_ledger commit.
+        transaction_amount:
+          type: number
+          format: float
+          description: Transaction amount in the declared currency.
+          example: 500000
+        webhook_received_at:
+          type: string
+          format: date-time
+          description: |
+            ISO 8601 timestamp at which the webhook was received. Used as the immutable
+            SLA reference time by the Uzbekistan SLA Calculator (BLOCK 3). The current
+            execution time is never substituted for this value.
+          example: "2025-06-01T10:22:00.000Z"
+        origin_telemetry:
+          $ref: '#/components/schemas/OriginTelemetry'
+        language_analysis:
+          type: object
+          description: Output of the Language Detection Engine (BLOCK 2, V20, Expanded).
+          properties:
+            detected:
+              type: string
+              enum: [uz, uz_cyrillic, ru, en, unknown]
+              description: Detected primary language of the ticket content.
+              example: uz
+            confidence:
+              type: number
+              format: float
+              minimum: 0
+              maximum: 1
+              example: 0.92
+            status:
+              type: string
+              description: |
+                Detection status. `MISSING_TEXT_FOR_ANALYSIS` indicates a voice-only ticket
+                awaiting transcription, triggering the `is_voice_fallback` flag.
+              example: OK
+            is_voice_fallback:
+              type: boolean
+              description: True if the ticket is a voice message without a text transcript.
+        translated_intent:
+          type: object
+          description: |
+            Normalized intent terminology after trilingual parsing. Maps language-specific
+            terms (e.g., Uzbek `to'lov`, Russian `оплата`, English `payment`) to a
+            canonical English intent label. This field ensures that the rule-based
+            classifier (BLOCK 2) operates on a language-agnostic representation.
+          properties:
+            canonical_intent:
+              type: string
+              example: payment_issue
+            source_language:
+              type: string
+              example: uz
+            confidence:
+              type: number
+              format: float
+              minimum: 0
+              maximum: 1
+              example: 0.90
+        cbu_compliance:
+          type: object
+          description: CBU 25 BRV compliance mapping fields.
+          properties:
+            compliance_mapped:
+              type: boolean
+              description: |
+                Must be `true` for the ticket to proceed past Phase 0 Validation Gate.
+                Set by the Restructure with Config node (BLOCK 2).
+            cbv_25_brv_fields:
+              type: object
+              description: |
+                Direct mapping of CBU 25 BRV required audit fields. All values are
+                derived deterministically from the canonical ticket; none are user-supplied.
+              properties:
+                originating_institution:
+                  type: string
+                  example: "REVENANT_V26.5"
+                transaction_classification:
+                  type: string
+                  example: "RETAIL_TRANSFER"
+                jurisdictional_flags:
+                  type: array
+                  items:
+                    type: string
+                  example: ["JURISD_UZ"]
+                sar_status:
+                  type: string
+                  enum: [NONE, PENDING_SAR, FILE_SAR_IMMEDIATE]
+                  example: NONE
+        geo_risk:
+          type: object
+          description: |
+            Haversine geographic risk computation from the Master Triage Router (BLOCK 2).
+            The `haversine_distance_km` field captures the great-circle distance in kilometres
+            between the user's declared location and the device's network-derived location.
+            This field is used as the geographic risk offset coordinate in the weighted
+            risk score.
+          properties:
+            user_lat:
+              type: number
+              format: float
+              description: Declared user latitude (from `origin_telemetry`).
+              example: 41.2995
+            user_lon:
+              type: number
+              format: float
+              description: Declared user longitude (from `origin_telemetry`).
+              example: 69.2401
+            device_lat:
+              type: number
+              format: float
+              description: Device location latitude derived from IP geolocation.
+            device_lon:
+              type: number
+              format: float
+              description: Device location longitude derived from IP geolocation.
+            haversine_distance_km:
+              type: number
+              format: float
+              description: |
+                Computed Haversine great-circle distance in kilometres. If `> 100 km`,
+                the geo risk component is set to its maximum value of 100.
+              example: 0.0
+            geo_risk_score:
+              type: number
+              format: float
+              minimum: 0
+              maximum: 100
+              description: |
+                Risk score contribution from geographic mismatch. `0` if distance is
+                within the 100 km threshold; `100` if the threshold is exceeded.
+              example: 0.0
+        classification:
+          type: object
+          description: Output of the Rule-Based Classifier (BLOCK 2, V20) and severity classifier.
+          properties:
+            intent:
+              type: string
+              enum:
+                - access_issue
+                - payment_issue
+                - security_alert
+                - network_issue
+                - account_management
+                - general_inquiry
+                - unknown
+              example: payment_issue
+            severity:
+              type: string
+              enum: [critical, high, medium, low]
+              example: medium
+            confidence:
+              type: number
+              format: float
+              minimum: 0
+              maximum: 1
+              example: 0.90
+        text_features:
+          type: object
+          description: |
+            Deterministic boolean feature flags extracted by the Text Feature Engineering
+            node (BLOCK 2, V26 Hardened). Used as inputs to the rule-based severity
+            classifier and the Master Triage Router.
+          properties:
+            has_account_number:
+              type: boolean
+            has_phone_number:
+              type: boolean
+            has_card_number:
+              type: boolean
+            has_crypto_terms:
+              type: boolean
+            has_urgent_keywords:
+              type: boolean
+            has_security_terms:
+              type: boolean
+        security_gate:
+          type: object
+          description: Output of the BLOCK 0 Titanium Sanitizer security scan.
+          properties:
+            security_stop:
+              type: boolean
+              description: If `true`, the pipeline was halted. No downstream processing occurred.
+            violation_type:
+              type: string
+              enum: [PROMPT_INJECTION, CONTEXT_POISONING, NONE]
+              description: Classification of the detected threat, if any.
+            ingress_amount:
+              type: number
+              format: float
+              description: Sanitized transaction amount extracted from the payload.
+
+    ForensicSeal:
+      type: object
+      description: |
+        ## ForensicSeal Schema
+
+        The cryptographic proof of execution. Generated exclusively by BLOCK 7.6
+        (Forensic Signer, V26.5) and committed to the `audit_ledger` Supabase table
+        by BLOCK 7.7 (Telemetry Sink). Immutable after write. This object constitutes
+        the non-repudiation record for CBU audit purposes.
+
+        ### Cryptographic Construction
+        The `logManifest` object — comprising `trace_id`, `system_version`,
+        `seal_version`, `timestamp`, `decision`, `net_savings_uzs`, `validation_status`,
+        `temporal_proof`, and `data_payload_hash` — is serialized to canonical
+        deterministic JSON (keys sorted via `JSON.stringify(data, Object.keys(data).sort())`).
+        The `sha256_transaction_hash` is computed as `SHA-256(canonical_manifest_string)`.
+        The `forensic_signature` is computed as `HMAC-SHA256(canonical_manifest_string, HMAC_SECRET)`.
+
+        ### Constant-Time Verification
+        During ledger verification (`GET /v1/revenant/ledger/verify`), the server
+        reconstructs the HMAC and compares it against `forensic_signature` using
+        `crypto.timingSafeEqual(Buffer.from(reconstructed), Buffer.from(stored))`.
+        This enforces constant-time cryptographic buffer string verification,
+        eliminating timing side-channel attack vectors.
+
+        ### LLM Consensus Provenance
+        The `llm_consensus_state` block records both LLM verdicts and their SHA-256
+        fingerprints, providing cryptographic proof that the AI evaluation was performed
+        and what the specific outputs were.
+      required:
+        - execution_timestamp
+        - trace_id
+        - sha256_transaction_hash
+        - forensic_signature
+        - llm_consensus_state
+        - rpc_memory_crossref_id
+      properties:
+        execution_timestamp:
+          type: string
+          format: date-time
+          description: |
+            ISO 8601 timestamp at which the Forensic Signer (BLOCK 7.6) computed and
+            committed the seal. This is the authoritative time of execution for CBU audit.
+            It is distinct from `webhook_received_at` in the `CanonicalTicket`, which
+            records the original ingestion time.
+          example: "2025-06-01T10:30:05.000Z"
+        trace_id:
+          type: string
+          format: uuid
+          description: Canonical pipeline trace identifier. Links this seal to all related records.
+          example: "a3f7c912-d844-4e1b-b29a-0f88ea1c3b56"
+        system_version:
+          type: string
+          description: REVENANT system version active at the time of signing.
+          example: "v26.5-hardened"
+        seal_version:
+          type: string
+          description: Seal algorithm version identifier.
+          example: "3.1-HMAC-SHA256"
+        decision:
+          type: string
+          enum: [APPROVED, DENIED, ESCALATE_TO_HUMAN]
+          description: |
+            The final pipeline decision. `APPROVED` indicates the multi-LLM consensus
+            was unanimous and the Execution Policy Firewall cleared the contract.
+          example: APPROVED
+        net_savings_uzs:
+          type: integer
+          description: |
+            Net cost savings in UZS for this automated processing versus manual handling.
+            Computed by the Unit Economics Engine (BLOCK 7.2) as
+            `MANUAL_TICKET_COST - AI_PROCESSING_COST` using values from n8n variables.
+          example: 10000
+        validation_status:
+          type: string
+          enum: [PASSED, FAILED, PARTIAL]
+          description: Result of the BLOCK 7.3 Invariant Validator policy check.
+          example: PASSED
+        sha256_transaction_hash:
+          type: string
+          pattern: "^[a-f0-9]{64}$"
+          description: |
+            SHA-256 hash of the canonical deterministic JSON serialization of the
+            `logManifest` object. Computed as:
+            `crypto.createHash('sha256').update(JSON.stringify(manifest, sortedKeys)).digest('hex')`.
+            This value is the primary tamper-evidence fingerprint for the entire
+            execution record.
+          example: "e3b0c44298fc1c149afb4c8996fb92427ae41e4649b934ca495991b7852b855"
+        forensic_signature:
+          type: string
+          pattern: "^[a-f0-9]{64}$"
+          description: |
+            HMAC-SHA256 signature over the canonical `logManifest` JSON string, keyed
+            with the server-held `HMAC_SECRET` (minimum 32 bytes). Verified during
+            ledger audit via `crypto.timingSafeEqual` (constant-time comparison).
+            The server will halt execution with `CRITICAL_SECURITY_FAILURE` if
+            `HMAC_SECRET` is absent or shorter than 32 bytes.
+          example: "a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3"
+        data_payload_hash:
+          type: string
+          pattern: "^[a-f0-9]{64}$"
+          description: |
+            SHA-256 hash of the PII-scrubbed payload object (output of BLOCK 7.4).
+            Provides a cryptographic link to the sanitized data state without exposing
+            any personal information.
+          example: "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b"
+        llm_consensus_state:
+          type: object
+          required:
+            - consensus
+            - openai_action
+            - anthropic_action
+            - consensus_hash
+          description: |
+            Dual-provider LLM consensus verification record. Contains the independent
+            verdicts from the OpenAI and Anthropic models called via OpenRouter, along
+            with a SHA-256 fingerprint of the entire consensus object for non-repudiation.
+          properties:
+            consensus:
+              type: string
+              enum: [APPROVED, DENIED, ESCALATE_TO_HUMAN, SINGLE_PROVIDER_FALLBACK]
+              description: Final consensus verdict from the Consensus Engine Validator.
+              example: APPROVED
+            openai_action:
+              type: string
+              enum: [APPROVE, DENY, SCHEMA_FAILURE, TIMEOUT]
+              description: |
+                Raw action verdict returned by the OpenAI model (via OpenRouter,
+                model: `gpt-4o-mini`, timeout: 15,000 ms). `SCHEMA_FAILURE` indicates
+                the response did not conform to the required JSON schema.
+              example: APPROVE
+            openai_confidence:
+              type: number
+              format: float
+              minimum: 0
+              maximum: 1
+              description: Confidence score (0.0–1.0) returned by the OpenAI model.
+              example: 0.94
+            openai_rules_triggered:
+              type: array
+              items:
+                type: string
+              description: Risk rules flagged by the OpenAI model.
+              example: []
+            anthropic_action:
+              type: string
+              enum: [APPROVE, DENY, SCHEMA_FAILURE, TIMEOUT]
+              description: |
+                Raw action verdict returned by the Anthropic model (via OpenRouter,
+                timeout: 15,000 ms). Both models must independently return `APPROVE`
+                for the consensus to be `APPROVED`.
+              example: APPROVE
+            anthropic_confidence:
+              type: number
+              format: float
+              minimum: 0
+              maximum: 1
+              description: Confidence score (0.0–1.0) returned by the Anthropic model.
+              example: 0.91
+            anthropic_rules_triggered:
+              type: array
+              items:
+                type: string
+              description: Risk rules flagged by the Anthropic model.
+              example: []
+            consensus_hash:
+              type: string
+              pattern: "^[a-f0-9]{64}$"
+              description: |
+                SHA-256 hash of the canonical consensus object (sorted keys). Provides
+                a tamper-evident fingerprint of the entire LLM evaluation outcome.
+              example: "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+        rpc_memory_crossref_id:
+          type: string
+          description: |
+            Reference ID for the Supabase RPC vector similarity search executed by
+            BLOCK 6 (`POST /rest/v1/rpc/match_bank_memories`). The search queries the
+            `bank_memories` vector vault using a `text-embedding-3-small` embedding of
+            the execution context, with `similarity_threshold: 0.3` and `match_count: 5`.
+            This ID links the forensic record to the anomaly detection memory check
+            that confirmed or denied historical precedents for the transaction pattern.
+          example: "rpc_match_a3f7c912_1748772605000"
+        temporal_proof:
+          type: object
+          description: |
+            Time-travel snapshot of the AI evaluation environment. Enables future audit
+            replay by recording the exact model configuration and input state hash that
+            was present at the moment of signing. Added in V26.5.
+          properties:
+            model_config:
+              type: object
+              description: Configuration of the AI model at time of evaluation.
+              properties:
+                engine:
+                  type: string
+                  example: "gpt-4o-mini"
+                temperature:
+                  type: number
+                  format: float
+                  example: 0.2
+                safety_settings:
+                  type: string
+                  example: "STRICT_V2"
+            input_state_hash:
+              type: string
+              pattern: "^[a-f0-9]{64}$"
+              description: |
+                SHA-256 hash of the serialized intent object that the AI evaluated.
+                Proves what information was presented to the model without disclosing
+                PII. Enables verification that the AI decision was not made on
+                fabricated or substituted input.
+              example: "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+            policy_version:
+              type: string
+              description: REVENANT policy version active at time of signing.
+              example: "Revenant_v26.5_Article14"
+            timestamp_ms:
+              type: integer
+              format: int64
+              description: Unix epoch milliseconds at which the temporal snapshot was taken.
+              example: 1748772605000
+        cbu_compliance:
+          type: object
+          description: CBU compliance result from BLOCK 7.8 (CBU Compliance Engine, LRU-1115 Article 14).
+          properties:
+            cbv_25_brv_mapped:
+              type: boolean
+              example: true
+            sar_required:
+              type: boolean
+              description: True if the transaction amount met or exceeded the $10,000 USD SAR threshold.
+              example: false
+            regulatory_action:
+              type: string
+              enum: [NONE, FILE_SAR_IMMEDIATE]
+              example: NONE
+            jurisdictional_flags:
+              type: array
+              items:
+                type: string
+              example: ["JURISD_UZ"]
+            sar_xml_generated:
+              type: boolean
+              description: If `sar_required` is true, this confirms the SAR XML was generated and queued.
+              example: false
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # SUPPORTING SCHEMAS
+    # ─────────────────────────────────────────────────────────────────────────
+
+    OriginTelemetry:
+      type: object
+      description: |
+        Source telemetry metadata captured at ingestion. The IP address is used for
+        rate limiting. The geographic coordinates are used for the Haversine risk
+        offset calculation in the Master Triage Router.
+      properties:
+        ip_address:
+          type: string
+          format: ipv4
+          description: Source IP, corresponding to the `X-Real-IP` header value.
+          example: "91.185.18.22"
+        user_agent:
+          type: string
+          example: "Zoomrad/4.1.0 (Android)"
+        geo_lat:
+          type: number
+          format: float
+          description: Declared latitude of the user at time of submission.
+          example: 41.2995
+        geo_lon:
+          type: number
+          format: float
+          description: Declared longitude of the user at time of submission.
+          example: 69.2401
+        device_id:
+          type: string
+          description: Opaque device identifier for device trust score computation.
+          example: "dev_a1b2c3"
+        platform:
+          type: string
+          enum: [android, ios, web, unknown]
+          example: android
+
+    BiometricPayload:
+      type: object
+      description: |
+        Biometric data for voice-channel tickets or high-value transactions requiring
+        liveness verification. The Biometric Controller (BLOCK 1, V26 Hardened) performs
+        a challenge-response liveness check using a time-sensitive challenge phrase.
+        The `liveness_check` result must be `PASSED` before any advisory proceeds for
+        transactions with `ingress_amount >= 10,000`.
+      properties:
+        audio_base64:
+          type: string
+          format: byte
+          description: Base64-encoded audio recording for voice tickets.
+        mime_type:
+          type: string
+          example: "audio/ogg"
+        verification:
+          type: object
+          description: Output of the biometric verification process.
+          properties:
+            liveness_check:
+              type: string
+              enum: [PASSED, FAILED, PENDING, NOT_ENROLLED]
+              description: |
+                Result of the challenge-response liveness protocol. `PASSED` is required
+                for high-value transactions. `NOT_ENROLLED` indicates the customer has no
+                registered biometric profile and must complete enrollment first.
+              example: PASSED
+            voice_profile_id:
+              type: string
+              description: Identifier of the registered voice profile used for verification.
+            azure_profile_id:
+              type: string
+              description: Azure Cognitive Services voice profile identifier.
+        context:
+          $ref: '#/components/schemas/OriginTelemetry'
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # RESPONSE SCHEMAS
+    # ─────────────────────────────────────────────────────────────────────────
+
+    IngestAccepted:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [queued]
+          example: queued
+        message:
+          type: string
+          example: "Ticket accepted"
+        trace_id:
+          type: string
+          format: uuid
+          description: Canonical trace identifier for all subsequent audit and status queries.
+
+    ExecutionSuccess:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [EXECUTED]
+        contract_id:
+          type: string
+          example: "exec_a3f7c912-d844-4e1b-b29a-0f88ea1c3b56"
+        trace_id:
+          type: string
+          format: uuid
+        message_to_user:
+          type: string
+          example: "✅ Transaction Authorized. Processing now..."
+        core_banking_response:
+          type: object
+          properties:
+            action:
+              type: string
+              example: TRANSFER
+            amount:
+              type: number
+              example: 50000
+            status:
+              type: string
+              example: COMPLETED
+            trace_id:
+              type: string
+        forensic_seal:
+          $ref: '#/components/schemas/ForensicSeal'
+
+    LedgerVerificationResponse:
+      type: object
+      required:
+        - transaction_id
+        - signature_valid
+        - verification_performed_at
+        - forensic_seal
+      properties:
+        transaction_id:
+          type: string
+          format: uuid
+        signature_valid:
+          type: boolean
+          description: |
+            Authoritative result of the constant-time HMAC-SHA256 comparison
+            (`crypto.timingSafeEqual`). `true` confirms the ledger entry has not been
+            tampered with since it was committed by BLOCK 7.6. `false` constitutes a
+            critical integrity violation requiring immediate CBU escalation.
+        verification_performed_at:
+          type: string
+          format: date-time
+        forensic_seal:
+          $ref: '#/components/schemas/ForensicSeal'
+
+    ValidationError:
+      type: object
+      required:
+        - status
+        - error_code
+        - trace_id
+        - stage
+        - timestamp
+      properties:
+        status:
+          type: string
+          enum: [error]
+        message:
+          type: string
+        error_code:
+          type: string
+          enum:
+            - SB1_VALIDATION_TERMINAL
+            - CONTENT_VIOLATION
+            - CBU_COMPLIANCE_MAPPING_FAILED
+        sub_code:
+          type: string
+          enum:
+            - MISSING_TRACE_ID
+            - EMPTY_TRACE_ID
+            - MISSING_SUBJECT
+            - EMPTY_SUBJECT
+            - SUBJECT_TOO_LONG
+            - MISSING_REQUIRED_FIELD
+            - PROMPT_INJECTION
+            - CONTEXT_POISONING
+            - XSS_PATTERN
+            - SQLI_PATTERN
+        trace_id:
+          type: string
+        stage:
+          type: string
+          example: SB1
+        timestamp:
+          type: string
+          format: date-time
+
+    SemanticError:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [error]
+        error_code:
+          type: string
+          enum: [LIVENESS_REQUIRED, CBU_MAPPING_UNRESOLVABLE, BIOMETRICS_MISSING_FOR_HIGH_VALUE]
+        message:
+          type: string
+        trace_id:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+
+    RateLimitError:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [REJECTED]
+        error_code:
+          type: string
+          enum: [RATE_LIMIT_EXCEEDED]
+        message:
+          type: string
+          example: "Too many requests from this IP."
+        trace_id:
+          type: string
+        retry_after_seconds:
+          type: integer
+          description: Seconds until the rolling window resets for the requesting IP.
+
+    ConsensusFailure:
+      type: object
+      required:
+        - status
+        - error_code
+        - consensus_state
+        - trace_id
+        - review_queue_id
+      properties:
+        status:
+          type: string
+          enum: [PAUSED, STOP]
+        error_code:
+          type: string
+          enum:
+            - CONSENSUS_DENIED
+            - CONSENSUS_SCHEMA_FAILURE
+            - CONSENSUS_SINGLE_PROVIDER_FALLBACK
+            - EPF_VIOLATION
+            - SAR_TRIGGERED
+        consensus_state:
+          type: string
+          enum:
+            - DENIED
+            - ESCALATE_TO_HUMAN
+            - SINGLE_PROVIDER_FALLBACK
+            - EPF_VIOLATION
+            - SAR_TRIGGERED
+          description: Specific consensus failure category from the Consensus Engine Validator.
+        message:
+          type: string
+        review_queue_id:
+          type: string
+          description: |
+            Supabase `bank_approvals` `approval_id` of the created pending review record.
+            Null only when `consensus_state` is `EPF_VIOLATION` (policy firewall blocks
+            before a review record is created).
+        trace_id:
+          type: string
+          format: uuid
+        llm_summary:
+          type: object
+          properties:
+            openai_action:
+              type: string
+              enum: [APPROVE, DENY, SCHEMA_FAILURE, TIMEOUT]
+            anthropic_action:
+              type: string
+              enum: [APPROVE, DENY, SCHEMA_FAILURE, TIMEOUT]
+            rules_triggered:
+              type: array
+              items:
+                type: string
+        timeout_config:
+          type: object
+          description: Human approval timeout configuration from BLOCK 8.3.
+          properties:
+            max_wait_ms:
+              type: integer
+              example: 900000
+            strategy:
+              type: string
+              enum: [AUTO_REJECT]
+            expires_at:
+              type: string
+              format: date-time
+        forensic_flag:
+          type: boolean
+          description: |
+            Set to `true` for EPF_VIOLATION events. Indicates that a security-relevant
+            anomaly was detected and the incident has been written to the `audit_ledger`.
+
+    ExecutionRejected:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [REJECTED]
+        error_code:
+          type: string
+        message:
+          type: string
+        trace_id:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+
+    GovernanceBreach:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [REJECTED]
+        error_code:
+          type: string
+          enum: [GOVERNANCE_BREACH]
+        message:
+          type: string
+        trace_id:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+
+    DuplicateExecution:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [halted]
+        reason:
+          type: string
+          enum: [duplicate_request]
+        trace_id:
+          type: string
+        meta:
+          type: object
+          properties:
+            system:
+              type: string
+              example: "Guardian-V1"
+            forensic_hash:
+              type: string
+              pattern: "^[a-f0-9]{64}$"
+        message:
+          type: string
+
+    NotFound:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [not_found]
+        error_code:
+          type: string
+        message:
+          type: string
+        transaction_id:
+          type: string
+
+    AccessDenied:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [forbidden]
+        error_code:
+          type: string
+          enum: [INSUFFICIENT_SCOPE]
+        required_role:
+          type: string
+          example: cbu_compliance_officer
+        message:
+          type: string
+
+    InternalError:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [error]
+        error_code:
+          type: string
+          enum: [INTERNAL_PIPELINE_FAILURE]
+        message:
+          type: string
+        trace_id:
+          type: string
+        incident_ref:
+          type: string
+          description: |
+            Incident reference ID written by the Emergency Log node (BLOCK 3) and
+            dispatched via Gmail notification to the operations team. Use this reference
+            when contacting support.
+        timestamp:
+          type: string
+          format: date-time
