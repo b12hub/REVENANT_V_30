@@ -28,7 +28,8 @@
 * **U uxlamaydi va charchamaydi:** Bir vaqtning o'zida 5000 ta mijozga xizmat ko'rsata oladi.
 * **U aldanmaydi:** Agar mijozning ovozi sun'iy intellekt orqali soxtalashtirilgan (Deepfake) bo'lsa, tizim buni sezadi va jinoyatchi pulni yechib ketmasidan oldin hisobni bloklaydi.
 * **U xato qilmaydi:** Agar serverlar joylashgan bino yonib ketsa ham, u o'z ma'lumotlarini 1 soniya ichida boshqa shahardagi zaxira serverga uzatib, tranzaksiyalarni yo'qotmasdan ishlashda davom etadi.
-
+* **Avtomatik tranzaksiyalarni ovoz yoki text orqali almalga oshiradi**
+* **Ivoys (INN) , Kommunal xizatlar ,xullas barcha to'lov amallarini bajarishda foydalanuvchini yo'naltiradi**
 > *"O'zbekiston banklari har kuni minglab mijoz murojaatini qo'lda ko'rib chiqmoqda. Har bitta tiket agentdan o'rtacha **15 daqiqa** va **12,500 UZS** sarflaydi. REVENANT bu muammoni hal qiladi: har bir tiketni **2,500 UZS**ga, **soniyalar ichida**, qat'iy xavfsizlik arxitekturasi bilan avtomatik ishlaydi. Bu faqat chatbot emas — bu O'zbekistondagi birinchi **Tier-1 darajadagi, harbiy sinfli** bank AI orkestrasiya platformasidir."*
 
 ### 🎯 Biznes Muammo va REVENANT Yechimi
