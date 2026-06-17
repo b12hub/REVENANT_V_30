@@ -5,10 +5,9 @@
 
 > **"Hech qanday inson agenti kerak emas. Faqat natija."**
 
-[![Version](https://img.shields.io/badge/Version-V30_(Phase_5_Completed)-blueviolet?style=for-the-badge&logo=github)](https://github.com/)
+[![Version](https://img.shields.io/badge/Version-V30-blueviolet?style=for-the-badge&logo=github)](https://github.com/)
 [![Architecture](https://img.shields.io/badge/Architecture-Tier--1_Enterprise-red?style=for-the-badge&logo=n8n)](https://github.com/)
 [![Security](https://img.shields.io/badge/Security-WAF_%7C_Vault_%7C_KMS-success?style=for-the-badge&logo=spring-security)](https://github.com/)
-[![Category](https://img.shields.io/badge/Category-PDP_EcoSystem_2025-green?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PC9zdmc+)](https://github.com/)
 [![AI](https://img.shields.io/badge/AI-Dual_LLM_Consensus-orange?style=for-the-badge&logo=openai)](https://github.com/)
 [![Uzbekistan](https://img.shields.io/badge/Compliance-CBU_%7C_LRU--1115-teal?style=for-the-badge)](https://github.com/)
 [![Nodes](https://img.shields.io/badge/Workflow_Nodes-130+_Active-success?style=for-the-badge&logo=n8n)](https://github.com/)
