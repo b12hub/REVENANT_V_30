@@ -31,60 +31,16 @@ Bunga qo'shimcha: "Raqamli O'zbekiston 2030" doirasida milliy e-KYC / e-imzoga b
 ## 2. Oltita ustun
 
 
-
-| Ustun
-
- | Bir qatorli ta'rif
-
- | Maqsadli muddat
-
- |
+| Ustun | Bir qatorli ta'rif | Maqsadli muddat |
 | --- | --- | --- |
-| 1. Pul harakati
-
- | Yangi MB tezkor to'lov tizimidan boshqalardan oldin foydalanish
-
- | 2026-yil 3-chorak
-
- |
-| 2. O'rnatilgan kredit
-
- | Chatdagi bank darajasidagi kreditlash orqali Uzum Nasiya'ning BNPL ustunligiga qarshi chiqish
-
- | 2026-yil 3-4-choraklar
-
- |
-| 3. Ovozli birinchi bank xizmatlari
-
- | Uzum g'alaba qozona olmaydigan kanalni — telefon qo'ng'irog'ini yutib olish
-
- | 2026-yil 4-chorak
-
- |
-| 4. Suhbat orqali tijorat
-
- | Zamonaviy iste'molchi ilovalari bilan multimodal UX tengligi
-
- | 2026-yil 4-chorak – 2027-yil 1-chorak
-
- |
-| 5. Platforma va B2B himoyasi
-
- | Loyiha sotishni to'xtatish. Tarmoq sotishni boshlash.
-
- | 2027-yil 1-2-choraklar
-
- |
-| 6. Chegara garovlari
-
- | Qonunchilik keyinchalik qaysi tomonga o'zgarishiga nisbatan arzon variantlar
-
- | Davom etayotgan, imkoniyatga qarab
-
- |
+| **1. Pul harakati**<br> | Markaziy Bankning yangi tezkor to'lov tizimidan hammadan oldin foydalanish | 2026-yil 3-chorak |
+| **2. O'rnatilgan kredit**<br> | Chatdagi bank darajasidagi kreditlash orqali Uzum Nasiya'ning BNPL ustunligiga qarshi chiqish | 2026-yil 3–4-choraklar |
+| **3. Ovozli birinchi bank xizmatlari**<br> | Uzum yuta olmaydigan kanalni — telefon qo'ng'irog'ini yutib olish | 2026-yil 4-chorak |
+| **4. Suhbat orqali tijorat**<br> | Zamonaviy iste'molchi ilovalari bilan multimodal UX tengligi | 2026-yil 4-chorak – 2027-yil 1-chorak |
+| **5. Platforma va B2B himoyasi**<br> | Loyiha sotishni to'xtatish. Tarmoq sotishni boshlash. | 2027-yil 1–2-choraklar |
+| **6. Chegara garovlari**<br> | Regulyatsiya keyinchalik qayerga yo'nalishiga nisbatan arzon variantlar | Davom etayotgan, imkoniyatga qarab |
 
 ---
-
 ## 3. 1-ustun — Pul harakati (2026-yil 3-chorak)
 
 
@@ -227,44 +183,14 @@ QMB krediti va savdoni moliyalashtirish ilovalari uchun agentlik onbordingi (onb
 
 ## 9. Ketma-ketlik mantig'i (nega boshqa emas, aynan shu tartibda)
 
-
-
-| Ustuvorlik omili
-
- | U ishora qiluvchi ustunlar
-
- |
+| Ustuvorlik omili | U ishora qiluvchi ustunlar |
 | --- | --- |
-| Qonunchilik oynasi eng tez yopilmoqda
-
- | 1-ustun (MB tizimi *bu yil* yakunlanmoqda)
-
- |
-| To'g'ridan-to'g'ri raqobatbardosh qarshi zarba
-
- | 2-ustun (Uzum Nasiyaning aniq zaif tomoni sarmoya emas, qaror qabul qilish tezligidir)
-
- |
-| Hech bir super-ilova nusxalay olmaydigan farq
-
- | 3-ustun (ovoz/telefon tizimli jihatdan faqat ilova modeliga kirmaydi)
-
- |
-| Majburiy (table-stakes) UX tengligi
-
- | 4-ustun (umumiy AI chat mahsulotlariga nisbatan bo'shliqni yopadi)
-
- |
-| Biznes-model transformatsiyasi
-
- | 5-ustun ("loyiha" ni "platforma" ga aylantiradi; 1-2 ustunlar mahsulotning bitta bankda ishlashini isbotlagandan so'ng buni amalga oshiring)
-
- |
-| Tanlash imkoniyati (Optionality)
-
- | 6-ustun (arzon narxlardagi garovlar, qat'iy muddat yo'q)
-
- |
+| Qonunchilik oynasi eng tez yopilmoqda | 1-ustun (MB tizimi *bu yil* yakunlanmoqda) |
+| To'g'ridan-to'g'ri raqobatbardosh qarshi zarba | 2-ustun (Uzum Nasiyaning aniq zaif tomoni sarmoya emas, qaror qabul qilish tezligidir) |
+| Hech bir super-ilova nusxalay olmaydigan farq | 3-ustun (ovoz/telefon tizimli jihatdan faqat ilova modeliga kirmaydi) |
+| Majburiy (table-stakes) UX tengligi | 4-ustun (umumiy AI chat mahsulotlariga nisbatan bo'shliqni yopadi) |
+| Biznes-model transformatsiyasi | 5-ustun ("loyiha" ni "platforma" ga aylantiradi; 1-2 ustunlar mahsulotning bitta bankda ishlashini isbotlagandan so'ng buni amalga oshiring) |
+| Tanlash imkoniyati (Optionality) | 6-ustun (arzon narxlardagi garovlar, qat'iy muddat yo'q) |
 
 ---
 
