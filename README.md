@@ -428,7 +428,7 @@ Quyidagi ro'yxat V30 ichki auditida aniqlangan kamchiliklar va ularning V30.1'da
 | 6 | `Forensic Signer` faqat "KMS uchun tayyorlardi", haqiqiy imzolash yo'q edi | ✅ KMS `Sign` HTTP chaqirig'i qo'shildi |
 | 7 | Vault `role_id`/`secret_id` kod ichida hardcoded edi | ✅ Credential store/env'ga ko'chirildi |
 | 8 | Supabase lock/approval node'lari faqat PostgREST `PATCH` edi | ✅ Raw SQL `SELECT...FOR UPDATE` ga o'tkazildi |
-| 9 | Per-IP/token rate limiter umuman yo'q edi | ✅ Redis token-bucket (10/min) qo'shildi |
+| 9 | Per-IP/token rate limiter umuman yo'q edi | ✅ Redis Fixed-Window Time Key (10/min) qo'shildi (Cheklov aylanib o'tildi)
 | 10 | Triton lokal fallback yo'q edi (faqat cloud-to-cloud) | ✅ `LLM_MODE_LOCAL_ONLY` yo'nalishi Triton'ga ulandi |
 | 11 | Cross-encoder rerank tasdiqlanmagan edi | ✅ RPC darajasida tasdiqlandi/qo'shildi |
 | 12 | Region Health statik/simulyatsiya edi | ✅ Haqiqiy `/health` probe qo'shildi |
