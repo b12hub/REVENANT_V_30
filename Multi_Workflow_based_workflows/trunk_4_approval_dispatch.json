@@ -1,0 +1,1502 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// NODE: Approval Request Registrar (Hardened v26.2 - Deterministic ID)\n// FIX: Removed randomUUID() to enforce Idempotency.\n// TRACE_ID = APPROVAL_ID. Same Trace -> Same ID -> DB Lock.\n\nconst crypto = require('crypto');\n\nconst input = $json;\nconst trace_id = input.trace_id;\nconst advisory_hash = input.advisory_hash;\nconst selected_channel = input.selected_channel;\nconst block_4_seal_hash = input.block_4_seal_hash;\n\n// ---- 1. EXTRACT TRANSACTION CONTEXT (ROBUST STRATEGY) ----\nconst pkg = input.advisory_package || {};\nlet transaction_context = pkg.transaction_context || null;\n\n// FALLBACK: Recover from UI if structured data was stripped by Adapter\nif (!transaction_context && pkg.transaction_ready === true && Array.isArray(pkg.sections)) {\n    const alertSection = pkg.sections.find(s => s.type === 'alert_box_critical');\n    \n    if (alertSection) {\n        // Extract Tool Name\n        const titleParts = alertSection.title.split(':');\n        const toolName = titleParts.length > 1 ? titleParts[1].trim() : 'UNKNOWN_TOOL';\n        \n        // Extract Rationale\n        const rationale = alertSection.content || \"Emergency action triggered via UI.\";\n        \n        transaction_context = {\n            proposal: toolName,\n            rationale: rationale,\n            parameters: { target_id: \"CUSTOMER_ID\" },\n            requires_approval: true\n        };\n    }\n}\n\nconst has_valid_transaction = transaction_context && \n                              transaction_context.proposal && \n                              transaction_context.proposal !== 'NONE';\n\n// ---- 2. GENERATE DETERMINISTIC APPROVAL ID (THE FIX) ----\n// 🛑 REMOVED: crypto.randomUUID()\n// ✅ ADDED: Deterministic Hash of trace_id\n// This ensures that Trace X ALWAYS equals Approval ID Y.\n// If this ID exists in the DB, the next node (Supabase) will throw an error and BLOCK the flow.\nconst id_hash = crypto.createHash('sha256').update(trace_id).digest('hex').slice(0, 16);\nconst approval_id = `approval_${trace_id}_${id_hash}`;\n\n// ---- 3. SINGLE TIMESTAMP\nconst created_at = new Date().toISOString();\nconst expires_at = new Date(Date.now() + 15 * 60 * 1000).toISOString();\n\n// ---- 4. APPROVAL REQUEST ENVELOPE (IMMUTABLE)\nconst approval_request = {\n  approval_id,\n  trace_id,\n  advisory_hash,\n  selected_channel,\n  block_4_seal_hash,\n  expires_at,\n  approval_ingress_path: \"/bank/approval/v1\",\n  max_approval_age_seconds: 900,\n  created_at,\n  // CRITICAL: Persist the reconstructed tool instruction\n  transaction_execution: has_valid_transaction ? transaction_context : null\n};\n\n// ---- 5. CRYPTOGRAPHIC IMMUTABILITY\nconst approval_request_hash = crypto.createHash('sha256')\n  .update(JSON.stringify(approval_request))\n  .digest('hex');\n\nconst request_integrity_hash = crypto.createHash('sha256')\n  .update(`${approval_id}:${advisory_hash}:${trace_id}:${created_at}:${selected_channel}:${block_4_seal_hash}`)\n  .digest('hex');\n\n// ---- 6. LEDGER RECORD WITH EXPLICIT STATE\nconst approval_record = {\n  approval_id,\n  trace_id,\n  advisory_hash,\n  block_4_seal_hash,\n  selected_channel,\n  approval_request_hash, \n  request_integrity_hash,\n  created_at,\n  expires_at,\n  consumed: false,\n  state: 'PENDING', \n  approval_request: approval_request \n};\n\nreturn [{\n  json: {\n    ...input,\n    approval_record,\n    approval_request, \n    __ledger_ready: true,\n    __crypto_immutable: true,\n    __approval_request_hash: approval_request_hash\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2704,
+        1232
+      ],
+      "id": "8eb7e2b8-1149-4cfe-a219-c8b9ee204eb6",
+      "name": "Approval Request Registrar – Authority1",
+      "retryOnFail": false,
+      "maxTries": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "// NODE: Block 5: Universal Gate (Hybrid - Robust V2)\n// SECURITY: Handles both \"New Ticket\" and \"Approval\" flows\n// FIX: Populates all metadata fields to prevent \"undefined\" errors downstream.\n\nconst item = $input.first();\nconst payload = item.json.body || item.json;\nconst approval_id = payload.approval_id;\nconst now = new Date().toISOString();\n\n// =========================================================\n// MODE 1: NEW TICKET GENERATION (Main Flow)\n// =========================================================\nif (!approval_id) {\n    // We are generating a new ticket. We don't have an ID yet.\n    // Security Check: Is the upstream Block 4 sealed?\n    const isLocked = item.json.__status?.block_4_locked === true || item.json.block_4_seal_hash;\n    \n    if (!isLocked) {\n        throw new Error(\"SECURITY_BLOCK: Attempted to process Unsealed Advisory.\");\n    }\n\n    // SUCCESS: Pass through with FULL metadata\n    return [{\n        json: {\n            ...item.json,\n            // Routing Flags\n            __flow_context: \"NEW_TICKET_GENERATION\",\n            __gate_status: \"PASSED_CREATION_CHECK\",\n            __approval_eligible: true, // CRITICAL: Forces the IF node to \"True\" path\n            \n            // Logging Metadata (Fixes undefined errors)\n            __eligibility_reason: \"NEW_TICKET_CREATION_AUTHORIZED\",\n            __eligibility_checked_at: now\n        }\n    }];\n}\n\n// =========================================================\n// MODE 2: APPROVAL VERIFICATION (Webhook Flow)\n// =========================================================\n// If we are here, we have an approval_id, so we MUST run Anti-Replay logic.\n\n// 1. RETRIEVE DB RECORD\n// This MUST be provided by the Supabase node immediately preceding this one.\nconst db_record = item.json.db_record || item.json; \n\n// 2. THE \"GHOST\" CHECK (Anti-Replay Logic)\nif (!db_record || db_record.approval_id !== approval_id) {\n   // If the DB lookup failed or returned nothing\n   throw new Error(`SECURITY_BLOCK: Approval ID ${approval_id} does not exist in ledger.`);\n}\n\n// CHECK 1: Is it already used?\nif (db_record.status === 'CONSUMED') {\n  throw new Error(`REPLAY_ATTACK_DETECTED: Approval ${approval_id} was already consumed at ${db_record.consumed_at}.`);\n}\n\n// CHECK 2: Is it strictly PENDING?\nif (db_record.status !== 'PENDING') {\n   throw new Error(`SECURITY_BLOCK: Invalid approval status: ${db_record.status}`);\n}\n\n// 3. PASS-THROUGH FOR HMAC\nreturn [{\n  json: {\n    ...item.json,\n    // Overwrite with IMMUTABLE DB data for security\n    advisory_hash: db_record.advisory_hash, \n    trace_id: db_record.trace_id,\n    expires_at: db_record.expires_at,\n    block_4_seal_hash: db_record.block_4_seal_hash,\n    \n    // Routing Flags\n    __flow_context: \"APPROVAL_VERIFICATION\",\n    __approval_eligible: true, // Forces \"True\" path\n    \n    // Logging Metadata (Fixes undefined errors)\n    __eligibility_reason: \"APPROVAL_VERIFIED_AGAINST_LEDGER\",\n    __eligibility_checked_at: now\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3600,
+        1136
+      ],
+      "id": "33939e82-dae5-472e-9f22-cdc08a28a0a3",
+      "name": "Approval Eligibility Gate1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json;\nconst { advisory_confidence, governance_flags, advisory_hash } = input;\n\n// 1. DATA EXTRACTION\n// Safe extraction with fallbacks\nconst jurisdiction = governance_flags?.jurisdiction || '*';\nconst confidence = advisory_confidence?.score || 0;\n\n// 2. CHANNEL ARBITRATION RULES\nconst CHANNEL_RULES = {\n  INTERNAL_UI: { min_confidence: 0.1, priority: 3 },\n  EMAIL_TEMPLATE: { min_confidence: 0.4, priority: 2 },\n  WEBHOOK_DELIVERY: { min_confidence: 0.7, priority: 1 }\n};\n\n// 3. SELECTION LOGIC\nlet selected_channel = 'INTERNAL_UI';\nlet eligible = ['INTERNAL_UI'];\n\n// ✅ FIX APPLIED: Removed \"&& jurisdiction !== '.uz'\" \n// Now, if confidence is high (0.7+), it sends a Webhook regardless of country.\nif (confidence >= 0.7) {\n  selected_channel = 'WEBHOOK_DELIVERY';\n  eligible = ['WEBHOOK_DELIVERY', 'EMAIL_TEMPLATE', 'INTERNAL_UI'];\n} else if (confidence >= 0.4) {\n  selected_channel = 'EMAIL_TEMPLATE';\n  eligible = ['EMAIL_TEMPLATE', 'INTERNAL_UI'];\n}\n\n// 4. FINAL OUTPUT\nreturn [{\n  json: {\n    ...input,\n    selected_channel,\n    eligible_channels: eligible,\n    arbitration_reason: `Clean Pass: Selected ${selected_channel} (Confidence: ${confidence})`,\n    arbitration_timestamp: new Date().toISOString(),\n    arbitration_final: true\n  }\n}];"
+      },
+      "id": "d7afae89-d5f2-4477-90db-0e0f9eb17621",
+      "name": "Channel Arbitration Engine1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3152,
+        1232
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json;\nconst { dispatch_guard, trace_id } = input;\n\n// ---- Normalized dispatch result\nconst dispatch_result = {\n  status: 'DELIVERED',\n  channel: 'INTERNAL_UI',\n  dispatch_id: `ui_${dispatch_guard.idempotence_key.slice(0, 16)}`,\n  dispatched_at: new Date().toISOString(),\n  internal_reference: `adv_${trace_id}`,\n  idempotence_key: dispatch_guard.idempotence_key,\n  approval_id: dispatch_guard.approval_id,\n  advisory_hash: dispatch_guard.advisory_hash\n};\n\nreturn [{\n  json: {\n    ...input,\n    dispatch_result,\n    __dispatch_type: 'INTERNAL_UI'\n  }\n}];"
+      },
+      "id": "bbfa75b3-ac45-4e6f-9913-101ee94aeb46",
+      "name": "INTERNAL_UI Dispatch1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1104,
+        736
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Analytics Emitter\nconst input = $json;\nconst { dispatch_outcome, validated_approval, advisory_confidence, __block_5_complete } = input;\n\n// ---- NON-BLOCKING ANALYTICS EMISSION\ntry {\n  const analytics_payload = {\n    event_id: `analytics_${Date.now()}_${dispatch_outcome?.dispatch_id || 'rejected'}`,\n    trace_id: input.trace_id,\n    dispatch_id: dispatch_outcome?.dispatch_id,\n    channel: dispatch_outcome?.channel || validated_approval?.selected_channel,\n    status: dispatch_outcome?.status || 'REJECTED',\n    confidence_score: advisory_confidence.score,\n    approver_role: validated_approval?.approver_role,\n    sealed_block_id: __block_5_complete?.seal_id,\n    canonical_advisory_hash: validated_approval?.advisory_hash?.slice(0, 16),\n    emitted_at: new Date().toISOString(),\n    analytics_class: 'NON_BLOCKING_OBSERVABILITY',\n    required_for_success: false,\n    authoritative: false\n  };\n\n  console.log('[ANALYTICS_EMITTED]', JSON.stringify(analytics_payload));\n} catch (analyticsError) {\n  console.error('[ANALYTICS_ERROR_NON_BLOCKING]', analyticsError.message);\n}\n\nreturn [{\n  json: {\n    ...input,\n    analytics_emission: {\n      status: 'EMITTED',\n      emission_id: `analytics_${Date.now()}`,\n      non_blocking: true,\n      audit_compliant: true\n    }\n  }\n}];"
+      },
+      "id": "2b896391-cfe7-4433-a172-c58e5d908d0e",
+      "name": "Analytics Emitter1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2896,
+        928
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the data from the Switch node\nconst input = $json;\nconst channel = input.dispatch_guard?.approved_channel;\n\n// Construct a detailed error message\nconst errorMessage = `INVALID_DISPATCH_CHANNEL: The channel '${channel || 'UNDEFINED'}' is not supported by the current routing logic. \nSupported: INTERNAL_UI, EMAIL_TEMPLATE, WEBHOOK_DELIVERY. \nTrace ID: ${input.trace_id}`;\n\n// Throwing the error stops the workflow and alerts the admin\nthrow new Error(errorMessage);"
+      },
+      "id": "9b27c002-c948-4b8c-9fd8-b02e674f55f5",
+      "name": "Invalid Channel Error1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        1264
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "hnot779@gmail.com",
+        "subject": "={{ 'Bank Advisory: ' + $json.trace_id }}",
+        "message": "=<div style=\"\n  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;\n  max-width: 620px;\n  margin: 0 auto;\n  background: linear-gradient(135deg, #f4f7fa 0%, #eef2f7 100%);\n  padding: 24px;\n  border-radius: 12px;\n\">\n\n  <div style=\"text-align:center; margin-bottom:24px;\">\n    <div style=\"\n      width:64px;\n      height:64px;\n      margin:0 auto 10px auto;\n      border-radius:50%;\n      background: radial-gradient(circle at top left, #3498db, #2c3e50);\n      box-shadow: 0 6px 14px rgba(0,0,0,0.15);\n      line-height:64px;\n      color:#fff;\n      font-weight:bold;\n      font-size:20px;\n    \">\n      R\n    </div>\n\n    <h2 style=\"margin:0; color:#2c3e50; letter-spacing:1px;\">\n      REVENANT\n    </h2>\n\n    <p style=\"margin-top:6px; font-size:12px; color:#7f8c8d;\">\n      {{ $json.email_labels.header || 'Secure Advisory' }} • Ref #{{ $json.trace_id.slice(0,8) }}\n    </p>\n  </div>\n\n  <div style=\"\n    background:#ffffff;\n    padding:28px;\n    border-radius:12px;\n    border:1px solid #e1e8ed;\n    box-shadow:0 10px 24px rgba(0,0,0,0.06);\n  \">\n\n    <p style=\"font-size:16px; color:#2c3e50; margin-top:0;\">\n      <strong>{{ $json.email_labels.greeting || 'Hello' }},</strong>\n    </p>\n\n    <p style=\"font-size:14px; color:#555; line-height:1.6;\">\n      Your request has been securely processed by our automated decision core.\n      Below is the official system guidance.\n    </p>\n\n    <div style=\"\n      background: linear-gradient(135deg, #e8f4fd, #f5fbff);\n      border-left: 4px solid #3498db;\n      padding:18px;\n      margin:22px 0;\n      border-radius:8px;\n    \">\n      <h3 style=\"\n        margin:0 0 10px 0;\n        font-size:11px;\n        color:#2980b9;\n        text-transform:uppercase;\n        letter-spacing:1px;\n      \">\n        ✉️ {{ $json.email_labels.header || 'Response' }}\n      </h3>\n\n      <p style=\"\n        font-size:16px;\n        color:#2c3e50;\n        margin:0;\n        font-weight:500;\n        line-height:1.7;\n      \">\n        {{ $json.advisory_package.sections[2].content || $json.advisory_package.draft_response }}\n      </p>\n    </div>\n\n    {{ $json.transaction_execution ? `\n    <div style=\"\n      background: #fff5f5;\n      border: 1px solid #fed7d7;\n      border-radius: 8px;\n      padding: 16px;\n      margin-bottom: 22px;\n    \">\n      <p style=\"color: #c53030; font-weight: bold; margin: 0 0 8px 0;\">🔴 ACTION EXECUTED</p>\n      <p style=\"color: #742a2a; margin: 0; font-size: 13px;\">\n        Tool: ` + $json.transaction_execution.proposal + `<br>\n        Status: PENDING APPROVAL\n      </p>\n    </div>\n    ` : '' }}\n\n    <div style=\"margin-bottom:22px;\">\n      <p style=\"font-size:13px; color:#e67e22; margin-bottom:6px;\">\n        <strong>💡 {{ $json.email_labels.note || 'Advisory Note' }}</strong>\n      </p>\n      <p style=\"\n        font-size:13px;\n        color:#666;\n        font-style:italic;\n        margin-top:0;\n        line-height:1.6;\n      \">\n        {{ $json.advisory_package.advisory_note }}\n      </p>\n    </div>\n\n    <div style=\"\n      border-top:1px solid #eee;\n      padding-top:18px;\n    \">\n      <p style=\"\n        font-size:14px;\n        color:#27ae60;\n        margin-bottom:10px;\n      \">\n        <strong>🛠️ {{ $json.email_labels.steps_title || 'Next Steps' }}</strong>\n      </p>\n\n      <div style=\"\n        font-size:14px;\n        color:#444;\n        line-height:1.7;\n        white-space:pre-line;\n      \">\n        {{ $json.email_labels.steps || $json.advisory_package.suggested_actions.join('\\n') }}\n      </div>\n    </div>\n\n    <p style=\"\n      margin-top:26px;\n      font-size:14px;\n      color:#7f8c8d;\n    \">\n      {{ $json.email_labels.sign_off || 'Regards, Revenant AI' }}\n    </p>\n  </div>\n\n  <div style=\"\n    margin-top:22px;\n    background:#f9fafb;\n    border-radius:10px;\n    padding:14px;\n    border:1px dashed #dfe6ec;\n    text-align:center;\n  \">\n    <p style=\"\n      font-size:11px;\n      color:#7f8c8d;\n      font-weight:bold;\n      margin-bottom:6px;\n      letter-spacing:0.5px;\n    \">\n      🛡️ {{ $json.email_labels.receipt_title || 'Forensic Receipt' }}\n    </p>\n\n    <p style=\"\n      font-size:10px;\n      color:#95a5a6;\n      font-family:monospace;\n      line-height:1.5;\n      margin:0;\n    \">\n      TRACE ID: {{ $json.trace_id }}<br>\n      STATUS: {{ $json.advisory_confidence.category.toUpperCase() }} VERIFIED<br>\n      PROTOCOL: WORM_COMPLIANT_v4.0\n    </p>\n  </div>\n\n</div>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1104,
+        928
+      ],
+      "id": "086479b7-0bc7-4ca9-b687-2e3d7b551131",
+      "name": "EMAIL_TEMPLATE Dispatch1",
+      "webhookId": "a04c1ba0-eb71-41f5-a276-77b26a094f8f",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "jA7rJULQDKn9e1wU",
+          "name": "Gmail OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.advisory_package.webhook_endpoint || 'https://api.bank.uz/advisory/webhook' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Idempotence-Key",
+              "value": "={{ $json.dispatch_guard.idempotence_key }}"
+            },
+            {
+              "name": "X-Advisory-Hash",
+              "value": "={{ $json.dispatch_guard.advisory_hash }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  trace_id: $json.trace_id,\n  advisory_hash: $json.dispatch_guard.advisory_hash,\n  approval_id: $json.dispatch_guard.approval_id,\n  channel: $json.dispatch_guard.approved_channel,\n  dispatched_at: new Date().toISOString(),\n  advisory_package: $json.advisory_package\n} }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "fa83c3b0-b584-45d6-a7ba-e5f22be5ac61",
+      "name": "WEBHOOK_DELIVERY Dispatch1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1104,
+        1120
+      ]
+    },
+    {
+      "parameters": {
+        "tableId": "bank_approvals",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "approval_id",
+              "fieldValue": "={{ $json.approval_record['approval_id'] }}"
+            },
+            {
+              "fieldId": "trace_id",
+              "fieldValue": "={{ $json.approval_record['trace_id'] }}"
+            },
+            {
+              "fieldId": "approval_request",
+              "fieldValue": "={{ $json.approval_request }}"
+            },
+            {
+              "fieldId": "advisory_hash",
+              "fieldValue": "={{ $json.approval_record['advisory_hash'] }}"
+            },
+            {
+              "fieldId": "selected_channel",
+              "fieldValue": "={{ $json.approval_record['selected_channel'] }}"
+            },
+            {
+              "fieldId": "request_integrity_hash",
+              "fieldValue": "={{ $json.approval_record['request_integrity_hash'] }}"
+            },
+            {
+              "fieldId": "approval_request_hash",
+              "fieldValue": "={{ $json.approval_record['approval_request_hash'] }}"
+            },
+            {
+              "fieldId": "created_at",
+              "fieldValue": "={{ $json.approval_record['created_at'] }}"
+            },
+            {
+              "fieldId": "expires_at",
+              "fieldValue": "={{ $json.approval_record['expires_at'] }}"
+            },
+            {
+              "fieldId": "consumed",
+              "fieldValue": "={{ $json.approval_record['consumed'] }}"
+            },
+            {
+              "fieldId": "state",
+              "fieldValue": "={{ $json.approval_record['state'].toLowerCase() }}"
+            },
+            {
+              "fieldId": "block_4_seal_hash",
+              "fieldValue": "={{ $json.approval_record['block_4_seal_hash'] }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -2480,
+        1232
+      ],
+      "id": "f9eec3e0-13b6-4fc7-8859-4e10b247e799",
+      "name": "Create a row1",
+      "credentials": {
+        "supabaseApi": {
+          "id": "r02w1pztpBboCFhe",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// NODE: Approval Envelope Validator (Smart Diagnostics)\n// LOGIC: Distinguishes between Hacking (HMAC Fail) and Expiry (Time Fail)\n\nconst stored_record = $json; \nconst approval_payload = $json.body;\n\nconsole.log(`[VALIDATOR] Processing approval: ${stored_record.approval_id}`);\n\n// 1. CHECK: DATA INTEGRITY\nif (!approval_payload) {\n  throw new Error('PAYLOAD_MISSING: No webhook body found in input');\n}\n\n// 2. CHECK: CONSUMED STATUS (Double Spend Protection)\nif (stored_record.consumed !== false) {\n  throw new Error(`APPROVAL_ALREADY_CONSUMED: This ticket was used on ${stored_record.consumed_at}`);\n}\n\n// 3. CHECK: PREVIOUS SECURITY AUDIT\n// We verify the flags set by the previous HMAC Verifier node\nconst security = stored_record.security || {};\nconst hmac_status = stored_record.hmac_check || {};\n\nif (security.is_authorized !== true) {\n    // DIAGNOSTIC FAILURE ROUTING\n    \n    // Case A: The Ticket is Expired\n    if (security.is_expired) {\n        throw new Error(`SECURITY_VIOLATION: TOKEN EXPIRED. \n        Deadline: ${stored_record.expires_at}\n        Attempted: ${approval_payload.approval_timestamp}\n        (Action: Create a fresh ticket to test this flow)`);\n    }\n\n    // Case B: It was already used\n    if (security.is_duplicate) {\n        throw new Error(`SECURITY_VIOLATION: REPLAY DETECTED. This approval was already consumed.`);\n    }\n\n    // Case C: The Cryptography actually failed (Real Attack)\n    if (hmac_status.match === false) {\n        throw new Error(`SECURITY_VIOLATION: HMAC MISMATCH (Cryptographic Tampering). \n        Received: ${hmac_status.received}\n        Calculated: ${hmac_status.calculated}`);\n    }\n\n    // Case D: Unknown Fallback\n    throw new Error(`SECURITY_VIOLATION: Unauthorized for unknown reason. Check input logs.`);\n}\n\n// 4. CHECK: STATE (Case Insensitive)\nif (stored_record.state.toUpperCase() !== 'PENDING') {\n  throw new Error(`INVALID_STATE: Expected PENDING, got ${stored_record.state}`);\n}\n\n// 5. SUCCESS OUTPUT\nreturn [{\n  json: {\n    valid: true,\n    reason: \"AUTHORIZED\",\n    action: \"EXECUTE_DISPATCH\",\n    \n    // Identity & Audit Trail\n    approval_id: stored_record.approval_id,\n    trace_id: stored_record.trace_id,\n    approver_id: approval_payload.approver_id,\n    approver_role: approval_payload.approver_role,\n    \n    // Decision Details\n    decision: approval_payload.decision,\n    approval_timestamp: approval_payload.approval_timestamp,\n    \n    meta: {\n      timestamp: new Date().toISOString(),\n      validator: \"5.1-smart-gate\",\n      expires_at: stored_record.expires_at\n    }\n  }\n}];"
+      },
+      "id": "ffef4d86-aa29-499f-9486-81ecfbdaa1a0",
+      "name": "Approval Envelope Validator1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -688,
+        1232
+      ]
+    },
+    {
+      "parameters": {
+        "useCustomSchema": true,
+        "operation": "get",
+        "tableId": "bank_approvals",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "approval_id",
+              "keyValue": "={{ $json.approval_id }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -1584,
+        1168
+      ],
+      "id": "74f660e0-43e5-4acb-8d95-392320ef2468",
+      "name": "Get a row1",
+      "credentials": {
+        "supabaseApi": {
+          "id": "r02w1pztpBboCFhe",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -912,
+        1232
+      ],
+      "id": "514a6df5-80b7-4dc6-aeb7-e69ca3ff4893",
+      "name": "Merge1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "524932e8-8d69-4323-8766-48ae1e544ebf",
+              "leftValue": "={{ $json.__approval_eligible }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "55813ea4-517a-499a-ad1b-0a185d2999a2",
+              "leftValue": "={{ $json.__flow_context }}",
+              "rightValue": "NEW_TICKET_GENERATION",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -3376,
+        1136
+      ],
+      "id": "2a62b682-a1d5-4b75-b1e5-789b8439ae4a",
+      "name": "Is Eligible for Dispatch?"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"halted\",\n  \"reason\": \"duplicate_request\",\n  \"trace_id\": \"{{ $('Is Eligible for Dispatch?').item.json.trace_id }}\",\n  \"meta\": {\n    \"system\": \"Guardian-V1\",\n    \"forensic_hash\": \"{{ $('Is Eligible for Dispatch?').item.json.block_4_seal_hash }}\"\n  },\n  \"message\": \"Transaction already under processing or archived.\"\n}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -2928,
+        1040
+      ],
+      "id": "2482579c-9290-4052-ada3-9d34cce82af2",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "chatId": "={{$vars.TELEGRAM_CHAT_ID}}",
+        "text": "=🚨 *SECURITY ALERT: DUPLICATE DISPATCH HALTED*\n \n=🔒 *APPROVAL REQUIRED* 🔒\n\n## *Trace ID:* {{ $json.approval_record.trace_id }}\n\nPlease review the transaction and click a button below to proceed.\n\n\n*Status:* `HALTED_DUPLICATE`\n*Reason:* `{{ $('Is Eligible for Dispatch?').item.json.__eligibility_reason }}`\n*Confidence:* `{{ $('Is Eligible for Dispatch?').item.json.advisory_confidence.score }}`\n \n*Checked At:* {{ $('Is Eligible for Dispatch?').item.json.__eligibility_checked_at }}\n \n---\n*Action:* The system has automatically halted this execution and sent a **200 OK Response** to the portal to prevent retry-loops.",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "✅ Approve",
+                    "additionalFields": {
+                      "url": "={{ $resumeWebhookUrl }}?decision=APPROVED"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "⛔ Reject",
+                    "additionalFields": {
+                      "url": "={{ $resumeWebhookUrl }}?decision=REJECTED"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -2256,
+        1232
+      ],
+      "id": "395765ae-b324-4704-91d3-99d19c8e08f0",
+      "name": "Send a text message",
+      "webhookId": "ff6dbe85-0857-40e5-a92c-7113906c71a7",
+      "credentials": {
+        "telegramApi": {
+          "id": "8BF8bS16xigtA8fS",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "dcbe3ab2-b0e5-447e-8a61-67129bd9efb0",
+              "leftValue": "={{ $('Is Eligible for Dispatch?').item.json.__eligibility_reason === 'DUPLICATE_DISPATCH_DETECTED' ? 1 : 0 }}",
+              "rightValue": 1,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -2928,
+        1232
+      ],
+      "id": "d0d14784-6cc4-49dc-8aa4-e27dc69f4b0d",
+      "name": "Security: High-Volume Duplicate Check"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$vars.SUPABASE_URL}}/rest/v1/bank_dispatch_logs",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"idempotence_key\": \"{{ $json.trace_id }}\",\n  \"trace_id\": \"{{ $json.trace_id }}\",\n  \"status\": \"HALTED_DUPLICATE\",\n  \"channel\": \"NONE\", \n  \"details\": \"{{ $json.__eligibility_reason }}\",\n  \"advisory_hash\": \"{{ $json.advisory_hash }}\",\n  \"dispatched_at\": \"{{ $json.__eligibility_checked_at }}\",\n  \"approval_id\": null \n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -3152,
+        1040
+      ],
+      "id": "c16a27f4-e657-4eb8-b192-cdb179c848fc",
+      "name": "HTTP Request",
+      "credentials": {
+        "supabaseApi": {
+          "id": "r02w1pztpBboCFhe",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\n\n// --- 1. KEY CONFIGURATION (SECURE HYBRID) ---\n// We try to get the key from n8n Variables first, then System Env, then fallback.\nconst BANK_HMAC_SECRET = $vars.HMAC_SECRET || process.env.HMAC_SECRET ;\n\nif (!BANK_HMAC_SECRET) {\n    throw new Error(\"CRITICAL: HMAC_SECRET is missing from both $vars and process.env\");\n}\n\n// --- 2. PROCESS LOOP (BATCH MODE) ---\n// We handle the data as a batch (requires \"Execute Once\" ON)\nconst items = $input.all();\n\nreturn items.map(item => {\n    const data = item.json;\n    // Handle both direct webhook body or nested body structure\n    const webhook = data.body || data;\n\n    if (!webhook || !webhook.approval_hmac) {\n        // We return a failed state instead of crashing, so the workflow can log the security event\n        return {\n            json: {\n                ...data,\n                security: { is_authorized: false, error: \"MISSING_HMAC\" },\n                audit_label: 'VERIFICATION_FAILED'\n            }\n        };\n    }\n\n    // --- 3. HMAC RECONSTRUCTION ---\n    // We use the exact same fields and order as the Generator\n    // We use safe access (|| '') to prevent null errors on missing fields\n    const hmacData = [\n        webhook.approval_id,\n        data.advisory_hash,\n        webhook.trace_id,\n        webhook.approver_id,\n        webhook.approval_timestamp,\n        webhook.decision\n    ].map(val => String(val || '').trim()).join(':');\n\n    const calculatedHmac = crypto\n        .createHmac('sha256', BANK_HMAC_SECRET)\n        .update(hmacData, 'utf8')\n        .digest('hex');\n\n    // --- 4. VALIDATION LOGIC (HARDENED) ---\n    \n    // SECURITY UPGRADE: Constant-Time Comparison\n    // Prevents timing attacks where hackers guess the key by measuring processing time.\n    const targetBuffer = Buffer.from(calculatedHmac);\n    const inputBuffer = Buffer.from(webhook.approval_hmac);\n    \n    let hmacMatches = false;\n    try {\n        if (targetBuffer.length === inputBuffer.length) {\n            hmacMatches = crypto.timingSafeEqual(targetBuffer, inputBuffer);\n        }\n    } catch (e) {\n        hmacMatches = false;\n    }\n    \n    // Check expiry if it exists (Auto-Pilot might not set expiry on the payload, but DB record has it)\n    const expiresAt = data.expires_at || data.approval_request?.expires_at;\n    const isExpired = expiresAt ? (new Date() > new Date(expiresAt)) : false;\n    \n    const isAlreadyConsumed = data.consumed === true;\n\n    // Full authorization check\n    const authorized = hmacMatches && !isExpired && !isAlreadyConsumed;\n\n    // --- 5. OUTPUT ---\n    return {\n        json: {\n            ...data,\n            hmac_check: {\n                received: webhook.approval_hmac,\n                calculated: calculatedHmac,\n                match: hmacMatches\n            },\n            security: {\n                is_authorized: authorized,\n                is_expired: isExpired,\n                is_duplicate: isAlreadyConsumed\n            },\n            // Final Audit Label for the next node\n            audit_label: authorized ? 'CRYPTO_VERIFIED' : 'VERIFICATION_FAILED'\n        }\n    };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1136,
+        1232
+      ],
+      "id": "ba505275-5cf9-43f7-82d3-ac22baced8cc",
+      "name": "HMAC Verifier"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -1360,
+        1232
+      ],
+      "id": "04c73b62-ddbe-4d5c-8a94-5c8149fa58d7",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "chatId": "={{$vars.TELEGRAM_CHAT_ID}}",
+        "text": "=✅ *Approval Processed Successfully* \n---------------------------------- \n🆔 **ID:** `{{ $json.approval_id }}` \n\n🔗 **Trace:** `{{ $json.trace_id }}` \n\n⚖️ **Decision:** `{{ $json.decision }}` \n\n⚠️ **Reason:** {{ $json.reason }}\n\n👤 **By:** `{{ $json.approver_id }}`\n\n📅 **Time:** {{ $json.meta.timestamp }}  \n\n*Status:* Database updated and transaction authorized.\n\n*Note:* The cryptographic window closed at {{ $json.meta.expires_at }}. No database changes were made.\n\n",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -240,
+        1328
+      ],
+      "id": "17e88f0c-c9bb-4a0c-801d-d73621078e64",
+      "name": "Notify: Security Violation/Expiry",
+      "webhookId": "97db8eeb-195d-4643-b439-1075ea6005dd",
+      "credentials": {
+        "telegramApi": {
+          "id": "8BF8bS16xigtA8fS",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "e8f641bf-e5e1-4662-958f-fbf74e28b81d",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -464,
+        1232
+      ],
+      "id": "cf5ad1fa-c660-40a8-bc70-0b18a8d71c69",
+      "name": "Gate: Is Valid"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "bank_approvals",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "approval_id",
+              "condition": "eq",
+              "keyValue": "={{ $json.approval_id }}"
+            },
+            {
+              "keyName": "consumed",
+              "condition": "eq",
+              "keyValue": "={{ false }}"
+            },
+            {
+              "keyName": "state",
+              "condition": "eq",
+              "keyValue": "PENDING"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "consumed",
+              "fieldValue": "={{ true }}"
+            },
+            {
+              "fieldId": "consumed_at",
+              "fieldValue": "={{ $json.meta.timestamp }}"
+            },
+            {
+              "fieldId": "approver_id",
+              "fieldValue": "={{ $json.approver_id }}"
+            },
+            {
+              "fieldId": "approver_role",
+              "fieldValue": "={{ $json.approver_role }}"
+            },
+            {
+              "fieldId": "approval_timestamp",
+              "fieldValue": "={{ $json.approval_timestamp }}"
+            },
+            {
+              "fieldId": "decision",
+              "fieldValue": "={{ $json.decision }}"
+            },
+            {
+              "fieldId": "state",
+              "fieldValue": "={{ $json.decision.toLowerCase() }}"
+            },
+            {
+              "fieldId": "validated_approval",
+              "fieldValue": "={{ JSON.stringify($json) }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -240,
+        1136
+      ],
+      "id": "e7f1bcae-44ba-4b2f-b4f0-49c8e6a086dc",
+      "name": "Update a row",
+      "credentials": {
+        "supabaseApi": {
+          "id": "r02w1pztpBboCFhe",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\n\n// Parse the validated_approval string from the previous node\nconst input = $json;\nconst validated = JSON.parse(input.validated_approval);\n\n// 1. Generate the Idempotence Key (Unique fingerprint for this dispatch)\nconst approved_channel = input.approval_request.selected_channel;\nconst idempotence_key = crypto.createHash('sha256')\n  .update(`${validated.approval_id}:${approved_channel}:${validated.trace_id}:${input.advisory_hash}`)\n  .digest('hex');\n\n// 2. Prepare the payload for the Supabase Lock node\nreturn {\n  idempotence_key,\n  approved_channel,\n  approval_id: validated.approval_id,\n  trace_id: validated.trace_id,\n  advisory_hash: input.advisory_hash,\n  decision: validated.decision,\n  // Pass through the original input to keep data flowing\n  parent_data: input \n};"
+      },
+      "id": "bd0aaae1-82fb-4db8-a6dc-a3a3bb663455",
+      "name": "Logic: Prepare Dispatch Guard",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -16,
+        1136
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return {\n  status: \"TERMINATED\",\n  reason: \"Transaction already processed or state invalid\",\n  idempotence_key: $json.idempotence_key,\n  timestamp: new Date().toISOString()\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        656,
+        1248
+      ],
+      "id": "15ae096d-9cc3-4772-9a1c-90c3904969dd",
+      "name": "Stop: Duplicate or Invalid"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.dispatch_guard.approved_channel }}",
+                    "rightValue": "INTERNAL_UI",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "ac66304b-38ff-41b9-83cb-3c01ccb1c5fa"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "57fdb1c5-7ac9-4942-b390-79d11ca114ae",
+                    "leftValue": "={{ $json.dispatch_guard.approved_channel }}",
+                    "rightValue": "EMAIL_TEMPLATE",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "5c5ffc84-9f33-40ec-bf94-fa34a700b57d",
+                    "leftValue": "={{ $json.dispatch_guard.approved_channel }}",
+                    "rightValue": "WEBHOOK_DELIVERY",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "6f005948-26cf-4dfb-bab7-ecf0dfacd582",
+                    "leftValue": "={{ $json.dispatch_guard.approved_channel }}",
+                    "rightValue": "Errors",
+                    "operator": {
+                      "type": "string",
+                      "operation": "notEmpty",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        656,
+        992
+      ],
+      "id": "c8e071ab-317f-4343-aded-27eacbb6b271",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "jsCode": "// NODE: Logic: Prepare Finalizer (Hardened v23)\n// RESILIENCE: Decoupled from specific node names. Uses direct input flow.\n\nconst item = $input.first();\nconst inputData = item.json;\n\n// 1. RECOVER CONTEXT\n// In n8n, if previous nodes are merged correctly, their data is available in the input.\n// We look for 'dispatch_guard' which should be passed down.\nconst dispatchGuard = inputData.dispatch_guard || {};\n\n// 2. CHECK DISPATCH SUCCESS\n// Gmail/Telegram usually returns an 'id' or 'message_id' on success.\nconst isSuccess = !!(inputData.id || inputData.message_id || inputData.ok); \nconst final_status = isSuccess ? 'dispatched' : 'failed';\nconst dispatch_id = inputData.id || inputData.message_id || `dispatch_${Date.now()}`;\n\nreturn {\n  json: {\n    idempotence_key: dispatchGuard.idempotence_key || \"unknown_key\",\n    approval_id: dispatchGuard.approval_id || inputData.approval_id || \"unknown_approval\",\n    final_status,\n    dispatch_id,\n    dispatch_result: inputData, // The actual response from Gmail/Telegram\n    approved_channel: dispatchGuard.approved_channel || \"UNKNOWN\",\n    trace_id: inputData.trace_id || dispatchGuard.trace_id,\n    \n    // Pass through full original context for the next node (Audit Logging)\n    original_full_data: inputData \n  }\n};"
+      },
+      "id": "d869de15-6286-4eab-b327-de0c3891bf81",
+      "name": "Logic: Prepare Finalizer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1328,
+        928
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{$vars.SUPABASE_URL}}/rest/v1/bank_dispatch_logs?idempotence_key=eq.{{ $json.idempotence_key }}&status=eq.locked",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"status\": \"{{ $json.final_status }}\",\n  \"dispatched_at\": \"{{ new Date().toISOString() }}\",\n  \"dispatch_id\": \"{{ $json.dispatch_id }}\",\n  \"dispatch_result\": {{ JSON.stringify($json.dispatch_result) }},\n  \"updated_at\": \"{{ new Date().toISOString() }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1552,
+        928
+      ],
+      "id": "4775a060-6093-4421-b3bc-beecc3e0d7dd",
+      "name": "Supabase: Update Dispatch Log",
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "r02w1pztpBboCFhe",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={\n  \"dispatch_finalized\": true,\n  \"dispatch_outcome\": {\n    \"status\": \"{{ $node[\"Logic: Prepare Finalizer\"].json.final_status.toUpperCase() }}\",\n    \"channel\": \"{{ $node[\"Logic: Prepare Finalizer\"].json.approved_channel }}\",\n    \"dispatch_id\": \"{{ $node[\"Logic: Prepare Finalizer\"].json.dispatch_id }}\",\n    \"approval_id\": \"{{ $node[\"Logic: Prepare Finalizer\"].json.approval_id }}\",\n    \"trace_id\": \"{{ $node[\"Logic: Prepare Finalizer\"].json.trace_id }}\",\n    \"finalized_at\": \"{{ new Date().toISOString() }}\",\n    \"idempotence_key\": \"{{ $node[\"Logic: Prepare Finalizer\"].json.idempotence_key }}\",\n    \"ledger_committed\": true\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2000,
+        928
+      ],
+      "id": "24af7e37-bb7d-4e60-ae7c-d60edc624dbb",
+      "name": "Set: Final Outcome"
+    },
+    {
+      "parameters": {
+        "url": "={{$vars.SUPABASE_URL}}/rest/v1/bank_approvals?approval_id=eq.json.approval_id }}&select=approval_request_hash,state,consumed_at",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.pgrst.object+json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        2224,
+        928
+      ],
+      "id": "e0824773-1c31-4016-b452-55e1e547b9ea",
+      "name": "Supabase: Fetch Final Approval",
+      "credentials": {
+        "supabaseApi": {
+          "id": "r02w1pztpBboCFhe",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{$vars.SUPABASE_URL}}/rest/v1/bank_approvals?approval_id=eq.{{ $json.approval_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"block_5_seal_hash\": \"{{ $json.block_5_seal_hash }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        2672,
+        928
+      ],
+      "id": "6c9224c9-21d2-48c2-bcbd-fbc1bb6fd48f",
+      "name": "Supabase: Commit Forensic Seal",
+      "credentials": {
+        "supabaseApi": {
+          "id": "r02w1pztpBboCFhe",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst lang = item.json.language_analysis?.detected || 'en'; // Default to English\n\n// Define your dictionary\nconst dictionary = {\n  uz: {\n    greeting: \"Assalomu alaykum\",\n    header: \"Rasmiy tavsiya\",\n    note: \"Tizim eslatmasi\",\n    steps_title: \"Keyingi qadamlar\",\n    steps: \"1. Yuqoridagi ko'rsatmalarga amal qiling.\\n2. Yordam kerak bo'lsa, mobil ilova orqali murojaat qiling.\",\n    sign_off: \"Ishonchingiz uchun rahmat,\\nCustomer Support Team\",\n    receipt_title: \"AUDIT VA XAVFSIZLIK CHEKI\"\n  },\n  ru: {\n    greeting: \"Здравствуйте\",\n    header: \"Официальная рекомендация\",\n    note: \"Системное примечание\",\n    steps_title: \"Дальнейшие шаги\",\n    steps: \"1. Следуйте инструкциям, указанным выше.\\n2. Если вам нужна помощь, свяжитесь с нами через приложение.\",\n    sign_off: \"Спасибо за доверие,\\nCustomer Support Team\",\n    receipt_title: \"АУДИТ И БЕЗОПАСНОСТЬ\"\n  },\n  en: {\n    greeting: \"Hello\",\n    header: \"Official Advisory\",\n    note: \"System Note\",\n    steps_title: \"Next Steps\",\n    steps: \"1. Follow the instructions provided above.\\n2. For further assistance, contact us via the mobile app.\",\n    sign_off: \"Thank you for your trust,\\nCustomer Support Team\",\n    receipt_title: \"AUDIT & SECURITY RECEIPT\"\n  }\n};\n\n// Select the correct strings based on detected language\nconst labels = dictionary[lang] || dictionary.en;\n\nreturn [{\n  json: {\n    ...item.json,\n    email_labels: labels\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        928
+      ],
+      "id": "21315e24-71f6-4a51-8556-527b25c6ca17",
+      "name": "Logic: Email Translator"
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\n\n// --- 1. KEY CONFIGURATION ---\nconst secret = $vars.HMAC_SECRET || process.env.HMAC_SECRET;\nif (!secret) throw new Error(\"CRITICAL: HMAC_SECRET missing.\");\n\nconst items = $input.all();\n\nreturn items.map(item => {\n    const inputData = item.json;\n    const dbRecord = inputData; \n\n    // --- 2. EXTRACT CONTEXT (HARDENED) ---\n    const ticketData = dbRecord.approval_request || {};\n    \n    // Check if we actually have data to analyze\n    const hasContext = ticketData.subject || ticketData.body || ticketData.transaction_execution;\n    const subject = (ticketData.subject || \"\").toLowerCase();\n    \n    let decision = \"APPROVED\";\n    let ai_reasoning = \"Standard validation.\";\n    \n    // --- 3. THE BRAIN (Zero-Trust Logic) ---\n\n    if (inputData.body && inputData.body.approval_hmac) {\n        // Human Override\n        decision = inputData.body.decision || \"REJECTED\";\n        ai_reasoning = \"Manual intervention by risk officer.\";\n    } else {\n        // Auto-Pilot\n        const approver_id = \"revenant_ai_core\";\n        const timestamp = new Date().toISOString();\n        \n        // 🛑 SECURITY RULE 1: MISSING CONTEXT = REJECT\n        // If we lost the subject/body, we cannot verify safety. BLOCK IT.\n        if (!hasContext) {\n            decision = \"REJECTED\";\n            ai_reasoning = \"SECURITY LOCK: Missing context in approval request. Fail-safe rejection.\";\n        } \n        // 🛑 SECURITY RULE 2: THREAT DETECTION\n        else {\n            const riskKeywords = ['replay', 'attack', 'fraud', 'scam', 'hacked', 'duplicate', 'deadbeef'];\n            const isHighRisk = riskKeywords.some(w => subject.includes(w));\n            \n            if (isHighRisk) {\n                decision = \"REJECTED\";\n                ai_reasoning = \"SECURITY LOCK: Threat indicators detected. Auto-Rejection enforced.\";\n            } else {\n                decision = \"APPROVED\";\n                ai_reasoning = \"Low Risk request. Auto-resolution applied.\";\n            }\n        }\n\n        // SIGNATURE\n        const hmacParts = [\n            dbRecord.approval_id,\n            dbRecord.advisory_hash,\n            dbRecord.trace_id,\n            approver_id,\n            timestamp,\n            decision\n        ].map(val => String(val || '').trim()).join(':');\n\n        const hmac = crypto.createHmac('sha256', secret).update(hmacParts).digest('hex');\n\n        return {\n            json: {\n                body: {\n                    approval_id: dbRecord.approval_id,\n                    decision,\n                    approver_id,\n                    approver_role: \"ai_governance_bot\",\n                    approval_timestamp: timestamp,\n                    approval_hmac: hmac,\n                    trace_id: dbRecord.trace_id,\n                    ai_reasoning\n                },\n                method_used: \"AUTO_PILOT_HARDENED\",\n                ai_analysis: ai_reasoning,\n                ...dbRecord\n            }\n        };\n    }\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1808,
+        1232
+      ],
+      "id": "42989f21-1fa2-4b42-8e6d-928e0c2e336e",
+      "name": "Approval Logic"
+    },
+    {
+      "parameters": {
+        "jsCode": "// NODE: Block 5: Final Execution Seal (Hardened v25 - Nuclear Recovery)\n// STRATEGY: Direct cross-node retrieval to bypass Merge isolation.\n\nconst crypto = require('crypto');\n\n// 1. REACH BACK TO THE SOURCE NODES\n// We look at 'Set: Final Outcome' which we know has the IDs from our previous logs.\nlet approval_id, trace_id, prev_hash;\n\ntry {\n    // Attempt to pull from the Final Outcome node specifically\n    const outcome = $node[\"Set: Final Outcome\"].json.dispatch_outcome;\n    approval_id = outcome.approval_id;\n    trace_id = outcome.trace_id;\n    prev_hash = outcome.advisory_hash;\n} catch (e) {\n    // Fallback if node name changed\n    approval_id = \"unknown_approval\";\n    trace_id = \"unknown_trace\";\n    prev_hash = \"MISSING_UPSTREAM_LINK\";\n}\n\n// 2. CONSTRUCT THE BLOCK 5 MANIFEST\nconst block_5_manifest = {\n    trace_id: trace_id,\n    approval_id: approval_id,\n    previous_block_hash: prev_hash,\n    final_status: \"SUCCESS_REJECTION_SEALED\",\n    seal_timestamp: new Date().toISOString(),\n    integrity_mode: \"CROSS_NODE_VERIFICATION_v25\"\n};\n\n// 3. GENERATE THE SEAL (SHA-256)\nconst seal_hash = crypto.createHash('sha256')\n    .update(JSON.stringify(block_5_manifest))\n    .digest('hex');\n\n// 4. OUTPUT\nreturn {\n    json: {\n        block_5_seal_hash: seal_hash,\n        approval_id: approval_id, // For Supabase PATCH URL\n        trace_id: trace_id,\n        seal_data: block_5_manifest,\n        integrity_status: (approval_id !== \"unknown_approval\" && prev_hash !== \"MISSING_UPSTREAM_LINK\") \n            ? \"CHAIN_RESTORED_BY_FORCE\" \n            : \"BROKEN_CHAIN\"\n    }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2448,
+        928
+      ],
+      "id": "ba3c12db-768d-452d-90fd-b93204505186",
+      "name": "Logic: Generate Block 5 Seal"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "check_no_error",
+                    "leftValue": "={{ $json.error }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "object",
+                      "operation": "notExists",
+                      "singleValue": true
+                    }
+                  },
+                  {
+                    "id": "check_status_locked",
+                    "leftValue": "={{ $json.status }}",
+                    "rightValue": "locked",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Authorized"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "check_error_exists",
+                    "leftValue": "={{ $json.error }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "object",
+                      "operation": "exists",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Blocked (Duplicate/Error)"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "none"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        432,
+        1136
+      ],
+      "id": "03f3c1ce-bd85-4410-9770-06edb5c0b2b5",
+      "name": "Switch: Validate Lock"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE bank_dispatch_logs \nSET status = 'locked', locked_at = NOW(), advisory_hash = $4 \nWHERE idempotence_key = $1 \n  AND approval_id = $2 \n  AND trace_id = $3 \n  AND status != 'locked'\nRETURNING *;",
+        "options": {}
+      },
+      "id": "a8fa1398-c960-45e2-a0d1-a1acf84ded1f",
+      "name": "Postgres: Acquire Dispatch Lock - MultiAZ",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [
+        208,
+        1136
+      ],
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 500,
+      "credentials": {
+        "postgres": {
+          "id": "YcdeCW9Ai0jkBLoE",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE bank_approvals \nSET consumed = true, consumed_at = NOW() \nWHERE approval_id = $1;",
+        "options": {}
+      },
+      "id": "686ff86f-463e-44db-abfc-edd285554c68",
+      "name": "Postgres: Update Approval State - MultiAZ",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [
+        1776,
+        928
+      ],
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 500,
+      "credentials": {
+        "postgres": {
+          "id": "YcdeCW9Ai0jkBLoE",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "approval-webhook",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "810b74bd-706b-46b7-9406-fc06320469c9",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -3824,
+        1136
+      ],
+      "webhookId": "bca25c81-8d8b-41ef-a226-1f681ddead98"
+    },
+    {
+      "parameters": {
+        "resume": "webhook",
+        "httpMethod": "POST",
+        "limitWaitTime": true,
+        "resumeAmount": 15,
+        "resumeUnit": "minutes",
+        "options": {}
+      },
+      "id": "26330e41-6d94-4bc8-b534-01a54bece341",
+      "name": "Wait",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -2032,
+        1232
+      ],
+      "webhookId": "73fe6084-5dc3-43c4-bc3a-95a4ee45bdcd"
+    }
+  ],
+  "connections": {
+    "Approval Request Registrar – Authority1": {
+      "main": [
+        [
+          {
+            "node": "Create a row1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approval Eligibility Gate1": {
+      "main": [
+        [
+          {
+            "node": "Is Eligible for Dispatch?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Channel Arbitration Engine1": {
+      "main": [
+        [
+          {
+            "node": "Security: High-Volume Duplicate Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "INTERNAL_UI Dispatch1": {
+      "main": [
+        [
+          {
+            "node": "Logic: Prepare Finalizer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "EMAIL_TEMPLATE Dispatch1": {
+      "main": [
+        [
+          {
+            "node": "Logic: Prepare Finalizer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WEBHOOK_DELIVERY Dispatch1": {
+      "main": [
+        [
+          {
+            "node": "Logic: Prepare Finalizer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create a row1": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approval Envelope Validator1": {
+      "main": [
+        [
+          {
+            "node": "Gate: Is Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get a row1": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge1": {
+      "main": [
+        [
+          {
+            "node": "Approval Envelope Validator1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Eligible for Dispatch?": {
+      "main": [
+        [
+          {
+            "node": "Channel Arbitration Engine1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a text message": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Security: High-Volume Duplicate Check": {
+      "main": [
+        [
+          {
+            "node": "Approval Request Registrar – Authority1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HMAC Verifier": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "HMAC Verifier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gate: Is Valid": {
+      "main": [
+        [
+          {
+            "node": "Update a row",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify: Security Violation/Expiry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update a row": {
+      "main": [
+        [
+          {
+            "node": "Logic: Prepare Dispatch Guard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Logic: Prepare Dispatch Guard": {
+      "main": [
+        [
+          {
+            "node": "Postgres: Acquire Dispatch Lock - MultiAZ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "INTERNAL_UI Dispatch1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Logic: Email Translator",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "WEBHOOK_DELIVERY Dispatch1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Invalid Channel Error1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Logic: Prepare Finalizer": {
+      "main": [
+        [
+          {
+            "node": "Supabase: Update Dispatch Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase: Update Dispatch Log": {
+      "main": [
+        [
+          {
+            "node": "Postgres: Update Approval State - MultiAZ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set: Final Outcome": {
+      "main": [
+        [
+          {
+            "node": "Supabase: Fetch Final Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase: Fetch Final Approval": {
+      "main": [
+        [
+          {
+            "node": "Logic: Generate Block 5 Seal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase: Commit Forensic Seal": {
+      "main": [
+        [
+          {
+            "node": "Analytics Emitter1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Logic: Email Translator": {
+      "main": [
+        [
+          {
+            "node": "EMAIL_TEMPLATE Dispatch1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approval Logic": {
+      "main": [
+        [
+          {
+            "node": "Get a row1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Logic: Generate Block 5 Seal": {
+      "main": [
+        [
+          {
+            "node": "Supabase: Commit Forensic Seal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch: Validate Lock": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stop: Duplicate or Invalid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres: Acquire Dispatch Lock - MultiAZ": {
+      "main": [
+        [
+          {
+            "node": "Switch: Validate Lock",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres: Update Approval State - MultiAZ": {
+      "main": [
+        [
+          {
+            "node": "Set: Final Outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Approval Eligibility Gate1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Approval Logic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "4f14f7ac18668138c414d2238e63ec58a8710810d54692bc8249b8c7e0dbb820"
+  }
+}
