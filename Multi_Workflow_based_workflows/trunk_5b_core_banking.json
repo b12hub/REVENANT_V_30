@@ -1,0 +1,151 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$vars.TEST_API_URL}}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"action\": \"TRANSFER\",\n  \"amount\": {{ $json.params.amount_atomic }},\n  \"status\": \"COMPLETED\",\n  \"trace_id\": \"{{ $json.contract_id }}\"\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -48,
+        -64
+      ],
+      "id": "01cb9d93-e27d-4520-a261-3b1b5b2355ad",
+      "name": "BLOCK 9.3: Single Core Banking API",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "trunk-5b",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -240,
+        -64
+      ],
+      "id": "4e21613f-7b52-413f-8b72-3534672ed4aa",
+      "name": "Webhook",
+      "webhookId": "d0d6e79c-feda-4d7a-a77c-81c9e1598d88"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "722249d3-5367-47db-9e55-06547bc6165a",
+              "leftValue": "={{ $json.error != undefined}}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        160,
+        -64
+      ],
+      "id": "11cabc72-5759-4d04-92b1-849a437e5d1f",
+      "name": "Error-Handler"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"status\": \"SUCCESS\", \n  \"delta\": {\n    \"transaction_id\": \"{{$json.transaction_id}}\" }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        368,
+        16
+      ],
+      "id": "5ea086ec-659e-41db-afaf-837d36d80a7f",
+      "name": "Respond_SUCCESS"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"status\": \"ERROR\", \n  \"error\": {\n      \"code\": \"PROVIDER_TIMEOUT\",\n      \"siem_alerted\": true}\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        368,
+        -160
+      ],
+      "id": "03271ea8-67a7-4844-a792-ad4bb5fa9455",
+      "name": "Respond_ERROR"
+    }
+  ],
+  "connections": {
+    "BLOCK 9.3: Single Core Banking API": {
+      "main": [
+        [
+          {
+            "node": "Error-Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "BLOCK 9.3: Single Core Banking API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error-Handler": {
+      "main": [
+        [
+          {
+            "node": "Respond_ERROR",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond_SUCCESS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "4f14f7ac18668138c414d2238e63ec58a8710810d54692bc8249b8c7e0dbb820"
+  }
+}
