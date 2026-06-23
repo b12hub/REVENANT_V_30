@@ -1,0 +1,53 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Immutable Inbound Request Envelope",
+  "description": "The strict data contract for tickets moving from the Core Switch to Sub-Workflows.",
+  "type": "object",
+  "required": ["meta", "payload", "canonical_ticket"],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["trace_id", "timestamp", "stage"],
+      "properties": {
+        "trace_id": {
+          "type": "string",
+          "description": "UUIDv4 generated at initial webhook ingress."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "stage": {
+          "type": "string",
+          "enum": ["INGRESS", "ENRICHED", "ROUTED"]
+        }
+      }
+    },
+    "payload": {
+      "type": "object",
+      "description": "The raw, untouched original webhook body for forensic auditing."
+    },
+    "canonical_ticket": {
+      "type": "object",
+      "required": ["client_ip", "intent", "ambiguity_score"],
+      "properties": {
+        "client_ip": {
+          "type": "string",
+          "description": "Captured cleanly at ingress to fix the old Redis back-reference bug."
+        },
+        "intent": {
+          "type": "string",
+          "enum": ["P2P_TRANSFER", "MERCHANT_CHECKOUT", "LOAN_ORIGINATION", "GENERAL_INQUIRY"]
+        },
+        "ambiguity_score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "amount": {
+          "type": "number"
+        }
+      }
+    }
+  }
+}
