@@ -1,0 +1,499 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.status }}",
+                    "rightValue": "STOP",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "18cfd2b8-936d-4ec7-9159-f2de2d6745ad"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Stop (Critical Alert)"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.status }}",
+                    "rightValue": "PAUSE",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "a90f1e81-7dc8-4660-84dc-66dbfa016b18"
+                  },
+                  {
+                    "leftValue": "={{ $json.status }}",
+                    "rightValue": "HOLD",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "58c9f538-4b71-464a-b6af-d3b2597d2ba0"
+                  }
+                ],
+                "combinator": "or"
+              },
+              "renameOutput": true,
+              "outputKey": "Hold (Approval Required)"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.status }}",
+                    "rightValue": "EXECUTE",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "c1f8d429-1b33-41bb-944f-cbf376f9edc9"
+                  },
+                  {
+                    "leftValue": "={{ $json.canonical_ticket.routing_decision.route }}",
+                    "rightValue": "P2P_TRANSFER",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "d718b5de-d510-4573-aeaf-189f415392d4"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Execute: P2P Transfer"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.status }}",
+                    "rightValue": "EXECUTE",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "9f26cd9c-c918-472b-87b6-ccb6f7902d84"
+                  },
+                  {
+                    "leftValue": "={{ $json.canonical_ticket.routing_decision.route }}",
+                    "rightValue": "INTERNAL_TRANSFER",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "673f8e56-11cd-40a2-b05f-f6bb7f2bc320"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Execute: Internal Transfer"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.status }}",
+                    "rightValue": "EXECUTE",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "764f2c99-1ef0-482f-87ba-50d4f29107cc"
+                  },
+                  {
+                    "leftValue": "={{ $json.canonical_ticket.routing_decision.route }}",
+                    "rightValue": "CARD_PAYMENT",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "3dc5083c-6238-4e3a-9e19-dc136367f0f6"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Execute: Card Payment"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.status }}",
+                    "rightValue": "EXECUTE",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "402e1b10-0db8-403d-8e42-cb25bb56c2e4"
+                  },
+                  {
+                    "leftValue": "={{ $json.canonical_ticket.routing_decision.route }}",
+                    "rightValue": "FLOW_BILL_PAY",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "f5164f9e-ccb0-4666-ac2a-9e9009df95b3"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Execute: Bill Pay & Government"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.status }}",
+                    "rightValue": "EXECUTE",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "2195f1ab-2713-4318-abf7-414841961fba"
+                  },
+                  {
+                    "leftValue": "={{ $json.canonical_ticket.routing_decision.route }}",
+                    "rightValue": "MERCHANT_CHECKOUT",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "e4ad9b30-31e3-4611-a8e5-397dbcc89bb2"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Execute: Merchant Checkout"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.status }}",
+                    "rightValue": "EXECUTE",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "90cc7d3e-4b47-41fb-9964-b258454b52ff"
+                  },
+                  {
+                    "leftValue": "={{ $json.canonical_ticket.routing_decision.route }}",
+                    "rightValue": "FLOW_TRANSACTION",
+                    "operator": {
+                      "type": "string",
+                      "operation": "notEquals"
+                    },
+                    "id": "0d6e75b7-7eb5-430c-abeb-a6b16c879c72"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "FAQ / Informational"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.status }}",
+                    "rightValue": "EXECUTE",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                  },
+                  {
+                    "leftValue": "={{ $json.canonical_ticket.routing_decision.route }}",
+                    "rightValue": "LOAN_ORIGINATION",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "b2c3d4e5-f678-90ab-cdef-123456789abc"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Execute: Loan Origination"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "ee428bbe-a6fe-450f-9399-aa127fe460ee",
+      "name": "BLOCK 9.0: Logic Distributor",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        -96,
+        -48
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{$vars.TELEGRAM_CHAT_ID}}",
+        "text": "=🚨 REVENANT ALERT 🚨\n\nStatus: {{ $json.status }}\n\nReason: {{ $json.message_to_user }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        112,
+        -160
+      ],
+      "id": "103a0915-0659-4977-8fc2-96521083064f",
+      "name": "BLOCK 9.1: Critical Alert Dispatch",
+      "webhookId": "5c6f8b80-c3a4-43a5-86fe-64a55d2b2ff7",
+      "credentials": {
+        "telegramApi": {
+          "id": "8BF8bS16xigtA8fS",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "trunk-5a",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -384,
+        80
+      ],
+      "id": "a9495655-6bd8-4d2a-a952-00035f619cce",
+      "name": "Webhook",
+      "webhookId": "e757aea0-e8f2-43c0-b77f-c7051606d64d"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        320,
+        -160
+      ],
+      "id": "79c17f40-e64d-4a71-a8fc-c4465a9c4f99",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"status\": \"SUCCESS\",\n  \"route\": \"{{ $json.canonical_ticket.routing_decision.route }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        224,
+        80
+      ],
+      "id": "da39f178-8ec8-4a31-a838-1a62765250bc",
+      "name": "Respond: Route Found"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"status\": \"ERROR\",\n  \"error\": { \"code\": \"UNKNOWN_ROUTE\" }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        224,
+        288
+      ],
+      "id": "b834356e-ea37-4020-bf39-5dea294bd166",
+      "name": "Respond: Unknown Route"
+    }
+  ],
+  "connections": {
+    "BLOCK 9.0: Logic Distributor": {
+      "main": [
+        [
+          {
+            "node": "BLOCK 9.1: Critical Alert Dispatch",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond: Route Found",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond: Route Found",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond: Route Found",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond: Route Found",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond: Route Found",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond: Route Found",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond: Route Found",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond: Route Found",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond: Unknown Route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BLOCK 9.1: Critical Alert Dispatch": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "BLOCK 9.0: Logic Distributor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond to Webhook": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "4f14f7ac18668138c414d2238e63ec58a8710810d54692bc8249b8c7e0dbb820"
+  }
+}
