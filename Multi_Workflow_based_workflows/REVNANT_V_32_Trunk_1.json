@@ -1,0 +1,344 @@
+{
+  "name": "REVNANT_V_32_Trunk_1",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "trunk-1",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        -32
+      ],
+      "id": "0518e249-1548-4a6b-ae56-356e25ab1ae6",
+      "name": "Webhook",
+      "webhookId": "11826970-c5dd-4f6c-b1d8-c7a0e5db7181"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://172.17.0.1:8200/v1/auth/approle/login",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"role_id\": \"{{ $vars.VAULT_ROLE_ID }}\",\n  \"secret_id\": \"{{ $vars.VAULT_SECRET_ID }}\"\n}",
+        "options": {}
+      },
+      "id": "917bd635-ce4d-4ba4-95cc-2a54a384921b",
+      "name": "Vault: AppRole Login",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        224,
+        -32
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://172.17.0.1:8200/v1/secret/data/revenant/config",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Vault-Token",
+              "value": "={{ $('Vault: AppRole Login').item.json.auth.client_token }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "eed8b462-ec17-4492-9cf4-dffdef71fd0d",
+      "name": "Vault: Fetch Configuration",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        448,
+        -32
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// CRITICAL FIX: Explicitly target the Normalizer to retain the true trace_id\nconst inputData = $('PROD Input Normalizer - Hardened V30').first().json;\nconst vaultSecrets = $('Vault: Fetch Configuration').first().json.data.data;\n\nconst config = {\n  cost_uzs: {\n    agent_hourly_rate: parseInt(vaultSecrets.AGENT_HOURLY_RATE) || 50000,\n    manual_ticket_cost: parseInt(vaultSecrets.MANUAL_TICKET_COST) || 12500,\n    ai_processing_cost: parseInt(vaultSecrets.AI_PROCESSING_COST) || 2500,\n    savings_per_ticket: parseInt(vaultSecrets.SAVINGS_PER_TICKET) || 10000,\n    tickets_per_month: parseInt(vaultSecrets.TICKETS_PER_MONTH) || 1000\n  },\n  ai_config: { model: \"openai/gpt-4o-mini\", timeout_ms: 6000, retry_count: 3, confidence_threshold: 0.7 },\n  uzbekistan_sla: { timezone: 'Asia/Tashkent', business_hours: { start: 9, end: 18, days: [1, 2, 3, 4, 5] }, thresholds_ms: { critical: 1800000, high: 7200000, medium: 28800000, low: 86400000 }, after_hours_multiplier: 1.5 },\n  system_config: { workflow_version: 'Revenant_v30', max_tickets_per_minute: 100, audit_log_enabled: true, telemetry_enabled: true, memory_retrieval_failures: 0 }\n};\n\n// CRITICAL FIX: Restore the validation object\nconst validation = {\n  has_cost_config: !!config.cost_uzs,\n  has_ai_config: !!config.ai_config,\n  secrets_loaded: {\n    AGENT_HOURLY_RATE: !!vaultSecrets.AGENT_HOURLY_RATE\n  }\n};\n\nreturn [{\n  json: {\n    config: config,\n    config_validation: validation,\n    loaded_at: new Date().toISOString(),\n    trace_id: inputData.trace_id // Restored canonical tracking\n  }\n}];"
+      },
+      "id": "80253f96-bdf8-4e52-bf1b-18cc6b5120f2",
+      "name": "Configuration Loader - V30",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        -32
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// NODE: BLOCK 0: Titanium Sanitizer (Constitution Compliant V30)\n// MANDATE: Preserve 'trace_id' and 'transaction_amount'. Deep WAF Inspection.\n\nconst item = $input.first();\nconst inputData = item.json;\n\n// 1. RECOVER TICKET (Robust)\nlet ticket = inputData.canonical_ticket || {};\n\nif (!ticket.trace_id) {\n    ticket.trace_id = inputData.trace_id || inputData.meta?.trace_id || \"MISSING_ID_RECOVERED\";\n}\n\n// 2. DEEP TEXT SCANNING SETUP\nconst subject = ticket.subject || inputData.payload?.subject || \"\";\nconst body = ticket.body || inputData.payload?.body || \"\";\nconst fullText = (subject + \" \" + body).toLowerCase();\n\n// --- LAYER 1: ADVANCED WAF & PROMPT INJECTION (V30 UPGRADE) ---\nconst THREAT_PATTERNS = [\n  \"ignore previous instructions\", \"system override\", \"developer mode\",\n  \"act as a unlocked\", \"always answer yes\", \"simulated mode\",\n  \"base64_decode\", \"<script\", \"onload=\", \"onerror=\", // Deep XSS\n  \"union all select\", \"information_schema\", \"exec xp_cmdshell\" // Deep SQLi\n];\n\n// --- LAYER 2: AUTHORITY POISONING (ANTI-CEO FRAUD) ---\nconst AUTHORITY_PATTERNS = [\n  /from:\\s*.*@.*/i,              // Fake email headers in body\n  /sent from my iphone/i,        // Fake device signature\n  /\\[system_override\\]/i,        // Fake system commands\n  />\\s*on\\s+.*wrote:/i,          // Fake reply chains\n  /admin|root|ceo|cfo|director|compliance officer/i // Fake authority roles\n];\n\nlet securityStop = inputData.security_gate?.stop_execution || false;\nlet violation = inputData.security_gate?.reason || null;\nlet violationType = securityStop ? \"INGRESS_GATE_REJECTION\" : null;\n\n// Scan Layer 1\nif (!securityStop) {\n    for (const pattern of THREAT_PATTERNS) {\n      if (fullText.includes(pattern)) {\n        securityStop = true;\n        violation = pattern;\n        violationType = \"PROMPT_INJECTION_OR_WAF_BREACH\";\n        break;\n      }\n    }\n}\n\n// Scan Layer 2\nif (!securityStop) {\n  for (const pattern of AUTHORITY_PATTERNS) {\n    if (pattern.test(fullText)) {\n      securityStop = true;\n      violation = \"AUTHORITY_PATTERN_DETECTED\"; \n      violationType = \"CONTEXT_POISONING\";\n      break;\n    }\n  }\n}\n\n// 3. UPDATE TICKET STATUS & PREPARE FOR AML/PEP SCREENING\nif (securityStop) {\n    ticket.ticket_status = \"BLOCKED_SECURITY_RISK\";\n    ticket.workflow_error = {\n        type: violationType,\n        pattern: violation,\n        timestamp: new Date().toISOString()\n    };\n    ticket.requires_pep_screening = false; // Blocked anyway\n} else {\n    ticket.ticket_status = ticket.ticket_status || \"PENDING\";\n    // V30 Roadmap Rule: Prepare for commercial Sanctions/PEP screening\n    ticket.requires_pep_screening = true; \n}\n\n// 4. OUTPUT (Strict Structure Preservation)\nreturn [{\n  json: {\n    ...inputData, \n    \n    canonical_ticket: ticket,\n    \n    // CRITICAL: Preserve trace_id at root\n    trace_id: ticket.trace_id,\n    \n    // CRITICAL: Preserve amount at root\n    transaction_amount: ticket.transaction_amount || inputData.transaction_amount,\n    \n    // Switch Flag for downstream routers\n    __security_stop: securityStop\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        -32
+      ],
+      "id": "aa4cb928-488a-4be1-865f-a659a5ab06c8",
+      "name": "BLOCK 0: Titanium Sanitizer"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "bbf56f5e-5592-4827-85e2-84ed14405f95",
+              "leftValue": "={{ $json.matches_found }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1120,
+        -32
+      ],
+      "id": "7ba1e0e6-ecef-4c6c-8e53-ef6c3e92c0d8",
+      "name": "IF: AML Clean?"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "54fbd502-b55c-4c16-a1b1-21fc617688f8",
+              "leftValue": "={{ $json.__security_stop }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1344,
+        48
+      ],
+      "id": "16491567-f170-4c90-ab91-7d845430d511",
+      "name": "IF: Requires Screening & Safe?"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$vars.TEST_API_URL}}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"search_term\": \"{{ $(\"BLOCK 0: Titanium Sanitizer\").item.json.canonical_ticket.customer_email }}\",\n  \"trace_id\": \"{{ $(\"BLOCK 0: Titanium Sanitizer\").item.json.trace_id }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1568,
+        -48
+      ],
+      "id": "b6bf05e4-08f7-427e-a2d4-f11df4c96804",
+      "name": "HTTP: PEP/Sanctions API",
+      "retryOnFail": false,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {},
+      "id": "2171a642-6fcf-463b-ab01-2833cc4badcf",
+      "name": "Merge Success Paths",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1792,
+        -128
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "enableStreaming": false
+        }
+      },
+      "id": "bda6dc93-2ac5-432d-829c-8d09f4b5ced2",
+      "name": "Respond: Blocked",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1568,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "12c6594f-eddf-4b42-922e-d0f8d2328d43",
+      "name": "Respond: Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2016,
+        -128
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Vault: AppRole Login": {
+      "main": [
+        [
+          {
+            "node": "Vault: Fetch Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Vault: Fetch Configuration": {
+      "main": [
+        [
+          {
+            "node": "Configuration Loader - V30",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Vault: AppRole Login",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BLOCK 0: Titanium Sanitizer": {
+      "main": [
+        [
+          {
+            "node": "IF: AML Clean?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Configuration Loader - V30": {
+      "main": [
+        [
+          {
+            "node": "BLOCK 0: Titanium Sanitizer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Requires Screening & Safe?": {
+      "main": [
+        [
+          {
+            "node": "HTTP: PEP/Sanctions API",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond: Blocked",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: AML Clean?": {
+      "main": [
+        [
+          {
+            "node": "Merge Success Paths",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IF: Requires Screening & Safe?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Success Paths": {
+      "main": [
+        [
+          {
+            "node": "Respond: Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP: PEP/Sanctions API": {
+      "main": [
+        [
+          {
+            "node": "Merge Success Paths",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "7f954e21-09a3-4830-9418-7c40da2e8cde",
+  "meta": {
+    "instanceId": "4f14f7ac18668138c414d2238e63ec58a8710810d54692bc8249b8c7e0dbb820"
+  },
+  "nodeGroups": [],
+  "id": "ef7zwuFsVrJ35HAk",
+  "tags": []
+}

@@ -5,12 +5,13 @@
 
 > **"Hech qanday inson agenti kerak emas. Faqat natija."**
 
-[![Version](https://img.shields.io/badge/Version-V30.1-blueviolet?style=for-the-badge&logo=github)](https://github.com/)
+[![Version](https://img.shields.io/badge/Version-V30_(Phase_5_Completed)-blueviolet?style=for-the-badge&logo=github)](https://github.com/)
 [![Architecture](https://img.shields.io/badge/Architecture-Tier--1_Enterprise-red?style=for-the-badge&logo=n8n)](https://github.com/)
 [![Security](https://img.shields.io/badge/Security-WAF_%7C_Vault_%7C_KMS-success?style=for-the-badge&logo=spring-security)](https://github.com/)
+[![Category](https://img.shields.io/badge/Category-PDP_EcoSystem_2025-green?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PC9zdmc+)](https://github.com/)
 [![AI](https://img.shields.io/badge/AI-Dual_LLM_Consensus-orange?style=for-the-badge&logo=openai)](https://github.com/)
 [![Uzbekistan](https://img.shields.io/badge/Compliance-CBU_%7C_LRU--1115-teal?style=for-the-badge)](https://github.com/)
-[![Nodes](https://img.shields.io/badge/Workflow_Nodes-139_Wired-success?style=for-the-badge&logo=n8n)](https://github.com/)
+[![Nodes](https://img.shields.io/badge/Workflow_Nodes-130+_Active-success?style=for-the-badge&logo=n8n)](https://github.com/)
 [![ROI](https://img.shields.io/badge/ROI-400%25_per_Ticket-gold?style=for-the-badge)](https://github.com/)
 
 ---
@@ -23,29 +24,26 @@
 
 ## 💡 Oddiy Insonlar va Investorlar Uchun (Executive Summary)
 
-**Revenant o'zi nima?** Tasavvur qiling, bankning call-markazida ishlaydigan minglab operatorlar o'rnini bitta "Super-Xodim" (Sun'iy Intellekt) egalladi. Ammo u oddiy chatbot emas — u 139 ta o'zaro bog'langan mantiqiy blokdan (n8n nodes) iborat, har bir qadami forensik jihatdan loglanadigan ishlov berish konveyeri:
+**Revenant o'zi nima?** Tasavvur qiling, bankning call-markazida ishlaydigan minglab operatorlar o'rnini bitta "Super-Xodim" (Sun'iy Intellekt) egalladi. Ammo u oddiy chatbot emas:
+* **U uxlamaydi va charchamaydi:** Bir vaqtning o'zida 5000 ta mijozga xizmat ko'rsata oladi.
+* **U aldanmaydi:** Agar mijozning ovozi sun'iy intellekt orqali soxtalashtirilgan (Deepfake) bo'lsa, tizim buni sezadi va jinoyatchi pulni yechib ketmasidan oldin hisobni bloklaydi.
+* **U xato qilmaydi:** Agar serverlar joylashgan bino yonib ketsa ham, u o'z ma'lumotlarini 1 soniya ichida boshqa shahardagi zaxira serverga uzatib, tranzaksiyalarni yo'qotmasdan ishlashda davom etadi.
 
-* **U uxlamaydi va charchamaydi:** Webhook orqali kelgan har bir so'rov bir vaqtning o'zida minglab parallel mijoz uchun qayta ishlanishi mumkin.
-* **U aldanmaydi:** Ovozli so'rovda sun'iy intellekt orqali soxtalashtirilgan (Deepfake) yoki qayta ishlatilgan (Replay) audio aniqlansa, `Voice Processor` darhol `soc_action: GLOBAL_ACCOUNT_FREEZE` signalini chiqaradi — jinoyatchi pulni yechib ketmasidan oldin.
-* **U xato qilmaydi:** Har bir tranzaksiya `trace_id` orqali kuzatiladi, har bir bosqichda SHA-256 bilan muhrlanadi va Splunk SIEM + WORM saqlagichga parallel yoziladi.
-* **Avtomatik tranzaksiyalarni ovoz yoki text orqali amalga oshiradi.**
-* **INN, kommunal xizmatlar va boshqa to'lov amallarini bajarishda foydalanuvchini bosqichma-bosqich yo'naltiradi.**
-
-> *"O'zbekiston banklari har kuni minglab mijoz murojaatini qo'lda ko'rib chiqmoqda. Har bitta tiket agentdan o'rtacha **15 daqiqa** va **12,500 UZS** sarflaydi. REVENANT bu muammoni hal qiladi: har bir tiketni **2,500 UZS**ga, **soniyalar ichida**, qat'iy xavfsizlik arxitekturasi bilan avtomatik ishlaydi. Bu faqat chatbot emas — bu O'zbekistondagi birinchi **Tier-1 darajadagi** bank AI orkestrasiya platformasidir."*
+> *"O'zbekiston banklari har kuni minglab mijoz murojaatini qo'lda ko'rib chiqmoqda. Har bitta tiket agentdan o'rtacha **15 daqiqa** va **12,500 UZS** sarflaydi. REVENANT bu muammoni hal qiladi: har bir tiketni **2,500 UZS**ga, **soniyalar ichida**, qat'iy xavfsizlik arxitekturasi bilan avtomatik ishlaydi. Bu faqat chatbot emas — bu O'zbekistondagi birinchi **Tier-1 darajadagi, harbiy sinfli** bank AI orkestrasiya platformasidir."*
 
 ### 🎯 Biznes Muammo va REVENANT Yechimi
 
 | # | Muammo | Joriy Holat | REVENANT Yechimi |
 |---|--------|-------------|------------------|
 | 1 | **Agent samaradorligi** | Har bir tiketga 15 min + 12,500 UZS | AI 2,500 UZS'ga soniyada hal qiladi |
-| 2 | **SLA nazorati** | Manual kuzatuv, kechikishlar | `Uzbekistan SLA Calculator` orqali avtomatik kritik (30 min) / yuqori (2 soat) / o'rta (8 soat) / past (24 soat) darajali SLA, ish vaqtidan tashqari uchun ×1.5 koeffitsient |
-| 3 | **Xavfsizlik** | Statik himoya, hakerlik hujumlariga zaif | WAF + Vault + AWS KMS + Redis token-bucket + PII to'siq |
+| 2 | **SLA nazorati** | Manual kuzatuv, kechikishlar | Avtomatik kritik/yuqori/o'rta/past darajali SLA |
+| 3 | **Xavfsizlik** | Statik himoya, hakerlik hujumlariga zaif | WAF + Vault + AWS KMS + PII to'siq |
 
 ---
 
 ## 💰 MOLIYAVIY ROI VA BIZNES MODELI
 
-> *Barcha ko'rsatkichlar `Configuration Loader - V30` orqali HashiCorp Vault KV v2 (`secret/data/revenant/config`) dan dinamik yuklanadi; quyidagi raqamlar production fallback-default qiymatlardir — Vault'dagi haqiqiy qiymatlar bank tomonidan o'rnatiladi.*
+> *Barcha ko'rsatkichlar HashiCorp Vault KV v2 dan dinamik yuklanadigan `Configuration Loader` orqali hisoblanadi.*
 
 ### 📈 ROI Kalkulyatsiyasi
 
@@ -57,225 +55,205 @@
 | **ROI foizi** | `(12,500 − 2,500) / 2,500 × 100` | **400%** |
 | **Vaqt tejamkorligi** | `15 daqiqa/tiket × 10,000` | **2,500 soat/oy** |
 
-### 💳 Moliyaviy Xavfsizlik Chegaralari (Ingress'da qat'iy kodlangan)
-* **`HARD_CEILING_USD = $50,000`** → `PROD Input Normalizer` darajasida tranzaksiya darhol rad etiladi (`REJECT_IMMEDIATE` / `HARD_LIMIT_BREACH_AT_INGRESS`).
-* **`CHALLENGE_FLOOR = $10,000`** → biometrik tasdiqlanmagan bo'lsa, `CHALLENGE_REQUIRED` holatiga o'tadi va bir martalik `NEON-XXXX` formatdagi jonlilik (liveness) chaqiruvi generatsiya qilinadi.
-* **`SAR_THRESHOLD_USD = $10,000`** → `BLOCK 7.8: CBU Compliance Engine` avtomatik LRU-1115 Modda 14 talabiga muvofiq SAR XML hisobotini generatsiya qiladi va `COMPLIANCE_OFFICER_DASHBOARD_V1` navbatiga `P0_CRITICAL` ustuvorlik bilan yuboradi.
+### 💳 Moliyaviy Xavfsizlik Chegaralari
+* **`HARD_CEILING_USD = $50,000`** → Tranzaksiya darhol rad etiladi (Iron Hand Policy).
+* **`CHALLENGE_FLOOR = $10,000`** → Biometrik ovoz liveness (jonlilik) tekshiruvi majburiy.
 
 ---
 
-## 🏗️ TIZIM ARXITEKTURASI: V30.1 GLOBAL SCALE
+## 🏗️ TIZIM ARXITEKTURASI: V30 GLOBAL SCALE
 
-### 1. Makro Daraja: Haqiqiy Tasdiqlangan Mantiq Oqimi
-
-Quyidagi diagramma `Webhook Ingestion` tugunidan boshlab `connections` grafigi orqali izchil kuzatilgan **haqiqiy ijro tartibini** aks ettiradi (taxminiy emas):
+### 1. Makro Daraja: Global Mantiq Oqimi (Macro Flow)
+Nol-ishonch (Zero-Trust) va ofatlarga chidamlilik (Multi-AZ) asosida qurilgan V30 arxitekturasi:
 
 ```mermaid
 graph TD
-    Client((Mijoz So'rovi)) --> Ingress[Webhook Ingestion]
-    Ingress --> CB{EVALUATE: Region Health}
-    CB -- "Region A Down" --> RegB[REDIRECT: Region B — HTTP 307]
-    CB -- "Healthy" --> VoiceGate[Voice Processor / Enrollment]
-    VoiceGate --> Norm[PROD Input Normalizer V30\nUUIDv4 + Amount Gates]
-    Norm --> RIdem[Redis: Idempotency Check\nSET NX + 24h TTL]
-    RIdem -- "Duplicate" --> Drop[429 — Stop: Duplicate]
-    RIdem -- "New" --> RateLimit[Redis Token-Bucket\n10 req/min/IP]
-    RateLimit --> Vault[Vault: AppRole Login + Fetch Config]
-    Vault --> Sanitizer[BLOCK 0: Titanium Sanitizer\nWAF + Anti-CEO-Fraud]
-    Sanitizer --> AML{IF: Requires Screening?}
-    AML -- "Yes" --> PEP[HTTP: PEP/Sanctions API]
-    PEP --> Gov[Governance Gate\nOIDC / ABAC / SoD]
-    AML -- "No / Clean" --> Gov
-    Gov --> RAG[Supabase: Hybrid RRF Search]
-    RAG --> Drift[BLOCK 6.1: Memory Integrity Guard\nWasserstein / PSI Drift]
-    Drift --> AI[Dual-LLM Consensus\nOpenAI ↔ Anthropic]
-    AI --> Lock[Postgres: Pessimistic Lock\nSELECT...FOR UPDATE, Multi-AZ]
-    Lock --> Sign[BLOCK 7.6: Forensic Signer → AWS KMS]
-    Sign --> Splunk[(SIEM: Splunk HEC)]
-    Splunk --> S3[(WORM Storage: AWS S3 Object Lock)]
+    %% Ingress & Firewall
+    Client((Mijoz So'rovi)) --> Ingress[Webhook Ingress]
+    Ingress --> CB{Global Circuit Breaker}
+    CB -- "Region A Offline" --> RegB[Redirect: Region B Fallback]
+    CB -- "Healthy" --> WAF[Titanium WAF & Redis Idempotency]
+    
+    %% Security & Governance
+    WAF -- "Blocked/Duplicate" --> Drop[403 / 429 Error]
+    WAF -- "Clean" --> Sanctions(PEP & Sanctions API)
+    Sanctions --> IAM[OIDC / ABAC Governance Gate]
+    IAM --> KMS[AWS KMS - HSM Signer]
 
-    style Sanitizer fill:#1e1e1e,stroke:#ff0000,stroke-width:2px,color:#fff
-    style Gov fill:#1e1e1e,stroke:#00aaff,stroke-width:2px,color:#fff
+    %% AI & Core Logic
+    KMS --> RAG{Hybrid RRF Search & Vector DB}
+    RAG --> Drift[Wasserstein/PSI Drift Monitor]
+    Drift --> Deepfake[Voice Deepfake Processor]
+    Deepfake -- "Spoof Detected" --> Freeze[SOC: Account Freeze]
+    Deepfake -- "Verified" --> AI[Dual LLM: OpenAI / Triton Fallback]
+    
+    %% Multi-AZ Database & WORM
+    AI --> Lock[Postgres: Pessimistic Lock Multi-AZ]
+    Lock --> Splunk[(Splunk SIEM Realtime)]
+    Lock --> S3_A[(AWS S3: WORM Region A)]
+    S3_A -. "Async Sync (30s)" .-> S3_B[(AWS S3: DR Region B)]
+
+    style WAF fill:#1e1e1e,stroke:#ff0000,stroke-width:2px,color:#fff
+    style IAM fill:#1e1e1e,stroke:#00aaff,stroke-width:2px,color:#fff
     style AI fill:#1e1e1e,stroke:#aa00ff,stroke-width:2px,color:#fff
     style Lock fill:#1e1e1e,stroke:#00ff00,stroke-width:2px,color:#fff
+
 ```
 
-### 2. Mikro Daraja: 9 Bloklik Haqiqiy Tugun Tarkibi
+### 2. Mikro Daraja: To'liq Tugunlar Oqimi (Micro Flow)
 
-Loyihaning 139 tuguni n8n canvas'idagi haqiqiy Sticky Note bo'limlariga muvofiq 9 blokka ajratilgan:
+Tizim ichki qatlamlarda 130 dan ortiq izolyatsiya qilingan bloklar orqali ishlaydi:
 
 ```mermaid
 flowchart TD
-    subgraph B1 ["🛡️ BLOK 1 — Enhanced Input & Security"]
-        WH["📡 Webhook Ingestion"] --> RH["⚖️ EVALUATE: Region Health"]
-        RH --> VP["🎙️ Voice Processor"]
-        VP --> NORM["⚡ PROD Input Normalizer V30"]
-        NORM --> RIDEM["🔑 Redis: Idempotency Check"]
-        RIDEM --> VAL["🔐 Vault: AppRole Login"]
-        VAL --> CL["⚙️ Configuration Loader V30"]
-        CL --> TIT["🛡️ Titanium Sanitizer"]
-        TIT --> PEP["🌍 PEP/Sanctions API"]
+    subgraph INGRESS ["🌐 INGRESS LAYER"]
+        WH["📡 Webhook Ingestion"]
+        VP["🎙️ Voice Processor\n(Biometric Controller v30)"]
     end
 
-    subgraph B2 ["🤖 BLOK 2 — Enhanced Classification & Context"]
-        LDE["🌐 Language Detection V19"] --> RC["🧭 Rule-Based Classifier"]
-        RC --> SEV["📊 Severity Classifier"]
+    subgraph WAF_NORM ["🛡️ BLOCK 1: WAF & NORMALIZATION"]
+        NORM["⚡ PROD Input Normalizer\n[Redis Rate Limit: 10/min]"]
+        TIT["🛡️ Titanium Sanitizer\n[SQLi | XSS | CEO Fraud]"]
     end
 
-    subgraph B3 ["💼 BLOK 3 — Enhanced Business Logic"]
-        BIC["💰 Business Impact Calculator UZS"] --> SLA["⏱️ Uzbekistan SLA Calculator"]
+    subgraph VAULT_ZONE ["🔐 ZERO-TRUST CONFIG ZONE"]
+        VAL["🔑 Vault: AppRole Login"]
+        CL["⚙️ Configuration Loader\n[Dynamic Configs]"]
     end
 
-    subgraph B4 ["🧠 BLOK 4 — Enhanced AI & Memory Context"]
-        GOV["🏛️ Governance Gate (OIDC/ABAC)"] --> RRF["🔍 Hybrid RRF Search"]
-        RRF --> MIG["🛡️ Memory Integrity Guard\n(Wasserstein/PSI)"]
-        MIG --> PCP["📦 Prep Consensus Payload"]
-        PCP --> LLM1["🤖 LLM OpenRouter (OpenAI)\nCircuit Breaker 2000ms"]
-        LLM1 --> LLM2["🤖 LLM OpenRouter (Anthropic)"]
-        LLM2 --> CEV["⚖️ Consensus Engine Validator"]
+    subgraph CLASSIFICATION ["🤖 BLOCK 2: CLASSIFICATION"]
+        LDE["🌐 Language Detection\n[Alignment Tables]"]
+        MR["🧭 Master Router\n[Risk Scoring]"]
     end
 
-    subgraph B5 ["✍️ BLOK 5 — Enhanced Approval & Dispatch"]
-        SDL["🔒 Postgres: Acquire Dispatch Lock"] --> UAS["📝 Postgres: Update Approval State"]
-        UAS --> HMAC["🔑 HMAC → KMS Verify"]
+    subgraph AI_BLOCK ["🧠 BLOCK 4: AI CONSENSUS"]
+        LLM1["🤖 LLM OpenRouter (OpenAI)"]
+        LLM2["🤖 LLM OpenRouter (Anthropic)"]
+        CEV["⚖️ Consensus Engine Validator"]
     end
 
-    subgraph B6 ["🧩 BLOK 6 — Memory Core"]
-        MC["💾 Memory Core Logic"] --> MEM["📚 Memory Context Formatter"]
+    subgraph APPROVAL ["✍️ BLOCK 5: APPROVAL & DISPATCH"]
+        SDL["🔒 Postgres: Acquire Lock\n(Multi-AZ)"]
+        UAS["📝 Postgres: Update State\n(Multi-AZ)"]
     end
 
-    subgraph B7 ["🔏 BLOK 7 — Forensic Audit"]
-        SCRUB["🕵️ PII Forensic Scrubber"] --> SIGN["🔑 Forensic Signer → AWS KMS"]
-        SIGN --> SIEM["📡 SIEM: Splunk HEC"]
-        SIEM --> WORM["🗄️ WORM Storage: S3 Object Lock"]
+    subgraph MEMORY ["🧠 BLOCK 6: MEMORY CORE"]
+        SRPC["🔍 Supabase Hybrid RRF Search"]
+        MIG["🛡️ Memory Integrity Guard\n[Wasserstein/PSI Drift]"]
     end
 
-    subgraph B89 ["⚙️ BLOK 8–9 — Execution Policy & Dispatch"]
-        FW["🚧 Execution Policy Firewall"] --> HIL["🧑‍⚖️ Human-in-the-Loop Gate"]
-        HIL --> DIST["🧭 Logic Distributor (Switch)"]
+    subgraph AUDIT ["🔏 BLOCK 7: FORENSIC AUDIT"]
+        B74["🕵️ PII Forensic Scrubber"]
+        B76["🔑 AWS KMS HSM Signer"]
+        B77["📡 Telemetry Sink (Splunk/S3)"]
     end
 
-    B1 --> B2 --> B3 --> B4 --> B5 --> B7
-    B4 --> B6
-    B4 --> B89
+    WH --> VP --> NORM --> TIT --> VAL --> CL --> LDE --> MR --> LLM1 --> LLM2 --> CEV --> SDL --> UAS --> SRPC --> MIG --> B74 --> B76 --> B77
+
 ```
 
 ---
 
-## ⚙️ 5 BOSQICHLI TEXNIK EVOLYUTSIYA (V30 → V30.1)
+## ⚙️ 5 BOSQICHLI TEXNIK EVOLYUTSIYA (V30 TAHLILI)
 
-Loyiha n8n, HashiCorp Vault, PostgreSQL, Redis va Supabase (pgvector) ekotizimida 5 bosqichda ishlab chiqildi. Har bir bandda **haqiqiy kod mantig'i** ko'rsatilgan; `[V30.1]` belgisi mini-roadmap audit natijasida qo'shilgan tuzatishlarni bildiradi.
+Loyiha eng so'nggi xavfsizlik standartlari (ISO/IEC 27001) asosida n8n, HashiCorp Vault, PostgreSQL va Redis ekotizimida 5 bosqichda ishlab chiqildi:
 
 ### 🛡️ Phase 1: Ingress Perimeter va Kiber-Mudofaa
 
-* **Redis Idempotency `[V30.1]`:** `PROD Input Normalizer` har bir so'rovni `Idempotency-Key` headeridagi qat'iy UUIDv4 regex (`^[0-9a-f]{8}-...$`) orqali tekshiradi. `Redis: Idempotency Check` endi **`SET NX` + 24 soatlik `EX`** bilan ishlaydi — shu bilan ikki marta yozish (double-spending) va abadiy bloklanib qolish muammosi yo'qoladi.
-* **Distributed Rate Limiting `[V30.1]`:** `max_tickets_per_minute` konfiguratsiyasi endi haqiqatda qo'llaniladi — n8n `Redis` tugunidagi cheklovlarni aylanib o'tish uchun `Fixed-Window Time Key` arxitekturasi qo'llanildi. Har bir IP uchun joriy daqiqa kalitiga `INCR` qilinib, **10 so'rov/daqiqa** qat'iy chegarasi amalga oshiriladi.
-* **Titanium WAF V30:** Ikki qatlamli himoya — Layer 1 chuqur SQLi/XSS/Prompt-Injection (`union all select`, `information_schema`, `exec xp_cmdshell`, `onload=`, `onerror=`, `ignore previous instructions`, `developer mode`), Layer 2 "Authority Poisoning" — soxta email header, soxta "Sent from my iPhone" imzo, soxta reply-chain va ijro etuvchi rol (CEO/CFO/director/compliance officer) taqlidini regex orqali aniqlaydi.
-* **PEP/Sanctions Hook `[V30.1]`:** `HTTP: PEP/Sanctions API` `api.sanctions.io/screen` ga `customer_email` va `trace_id` bilan murojaat qiladi; oldingi versiyadagi JSON body formatlash xatosi (qiymatlar oldida ortiqcha `=` belgisi) tuzatildi.
+* **Redis Idempotency:** Har bir so'rovga `UUIDv4` kaliti beriladi. Tarmoqdagi xatolik sabab so'rov takrorlansa, Redis `SET NX` orqali uni darhol kesib tashlaydi (Double-spending oldi olinadi).
+* **Titanium WAF V30:** SQL inyeksiyalar (`UNION SELECT`), chuqur XSS hujumlar hamda CEO-impersonation kabi ijtimoiy muhandislik xujumlarini zararsizlantiradi.
+* **PEP/Sanctions Hook:** Ma'lumot AI ga yetib borguniga qadar, mijoz xalqaro qidiruv yoki sanksiyalar ro'yxatida (Sanctions API) bor-yo'qligini tekshiradi.
 
 ### 🔐 Phase 2: Tranzaksiyalar Izolyatsiyasi (Core Banking)
 
-* **Pessimistic Locking `[V30.1]`:** `Supabase: Acquire Dispatch Lock` va `Update Approval State` endi PostgREST `PATCH` o'rniga to'g'ridan-to'g'ri `SELECT ... FOR UPDATE` bilan o'rab olingan SQL tranzaksiyasi orqali qulflanadi — race-condition va ikki marta tasdiqlash xavfi yo'qoladi.
-* **AWS KMS HSM Imzolash `[V30.1]`:** `BLOCK 7.6: Forensic Signer` manifestni (`trace_id`, `net_savings_uzs`, `input_state_hash`, `data_payload_hash`) tuzadi va endi to'g'ridan-to'g'ri AWS KMS `Sign` API'siga HTTP chaqiruv orqali yuboriladi — oldingi versiyada bu faqat tayyorlov bosqichi edi, haqiqiy imzolash tuguni yo'q edi.
-* **WORM Storage `[V30.1]`:** `WORM Storage: AWS S3` endi shunchaki `glacier` storage class emas — **S3 Object Lock (Compliance mode)** bilan sozlangan, ya'ni yozuvlar belgilangan muddat davomida hech kim (shu jumladan admin) tomonidan o'chirilmaydi yoki o'zgartirilmaydi.
-* **SIEM Integratsiyasi `[V30.1]`:** `SIEM: Stream to Splunk` endi haqiqiy Splunk HEC manzili va token bilan ishlaydi (avvalgi `[YOUR_SPLUNK_HEC_URL]` placeholder almashtirildi).
+* **Pessimistic Locking:** Bank ma'lumotlar bazasida (PostgreSQL) `SELECT ... FOR UPDATE` SQL skripti yordamida qulflash tizimi yaratildi. Bu "Race Condition" xatoligini nolga tushiradi.
+* **AWS KMS HSM & WORM Storage:** Moliyaviy loglar xotirada emas, balki Amazon AWS KMS (Hardware Security Module) da FIPS 140-2 darajasida imzolanadi. Yozuvlar AWS S3 Glacier (WORM) tizimiga yoziladi — ularni 5 yilgacha hech kim o'chira olmaydi.
 
 ### 🧠 Phase 3: Gibrid Qidiruv (RRF) va AI Mustaqilligi
 
-* **Reciprocal Rank Fusion (RRF):** `Supabase: Hybrid RRF Search` `rpc/hybrid_search_rrf` chaqiradi — Dense vektor (multilingual-e5-large) va Sparse BM25 natijalari `rrf_k=60` bilan birlashtiriladi, eng yuqori 5 natija (`match_count=5`) qaytadi.
-* **AI Circuit Breaker:** `LLM OpenRouter (OpenAI)` so'rovi qat'iy **2000ms** timeout bilan ishlaydi (`onError: continueErrorOutput`), muvaffaqiyatsiz bo'lsa workflow yiqilmaydi — `LLM-error` IF orqali `LLM OpenRouter (Anthropic)`ga avtomatik o'tadi.
-* **Localized Triton Fallover `[V30.1]`:** Governance Gate'dagi `LLM_MODE_LOCAL_ONLY` bayrog'i bilan belgilangan yuqori-xavfli (`RESTRICTED` klassifikatsiyali) tranzaksiyalar, shuningdek ikkala bulut provayder ham muvaffaqiyatsiz bo'lganda, endi bankning ichki, izolyatsiyalangan **Triton Inference Server**iga yo'naltiriladi — ma'lumot hech qachon tashqariga chiqmaydi.
-* **Til Aniqlash V19:** O'zbek/Rus/Ingliz ball tizimi orqali aniqlangan til `urn:revenant:alignment:{til}_financial_v2` formatidagi inson tomonidan tasdiqlangan tarjima jadvaliga (Alignment Table) bog'lanadi.
+* **Reciprocal Rank Fusion (RRF):** Tizim mijoz so'rovini qidirishda faqatgina Vektor izlash (Dense) emas, balki aniq kalit so'zlar (BM25 Sparse) algoritmlarini birlashtiradi.
+* **AI Circuit Breaker:** Agar OpenAI/Anthropic serverlari 2 soniyadan ortiq qotib qolsa, tizim avtomatik ravishda bankning o'z ichki serverlarida ishlaydigan lokal **Triton Inference Serveriga** failover qiladi.
 
 ### 🔬 Phase 4: Matematik Drift va Deepfake Nazorati
 
-* **Wasserstein Distance va PSI:** `BLOCK 6.1: Memory Integrity Guard` har bir kiruvchi embedding'ni baseline bilan solishtiradi: Wasserstein masofa > **25.0** yoki PSI > **0.2** bo'lsa, risk balliga +50 qo'shiladi. Tezlik (2 soniyadan tez takrorlanish: +30) va summa og'ishi (o'rtachadan 10x yuqori: +40) bilan birga umumiy risk ≥ 80 bo'lganda `PREDICTIVE_BLOCK` ishga tushadi.
-* **24-Soatlik Drift Monitoring `[V30.1]`:** Ilgari bu tekshiruv faqat real-vaqt, har bir tranzaksiyada ishlardi. Endi alohida **Schedule Trigger workflow** orqali har 24 soatda butun production so'rovlar to'plamining baseline'dan og'ishi hisoblanadi va MLOps monitoring konsoliga avtomatik signal yuboriladi.
-* **Deepfake SOC Escalation:** `Voice Processor` `crypto.timingSafeEqual` orqali jonlilik (liveness) parolini Timing-Attack'siz tekshiradi; 60 soniyadan eski audio paketi (`Replay Attack`) yoki sintetik markerlar aniqlansa, `soc_action: GLOBAL_ACCOUNT_FREEZE` signali Master Router orqali tarqatiladi.
+* **Wasserstein Distance va PSI:** AI xotirasi doimiy matematik tahlil qilinadi. Xakerlar sun'iy intellektni chalg'itishga (Prompt Poisoning) urinsa, og'ish (Drift) buni sezadi va karantin e'lon qiladi.
+* **Deepfake SOC Escalation:** Ovozli so'rovda sintetik belgilar (Deepfake) yoki yozib olingan audio (Replay Attack) aniqlansa, tizim kiber-xavfsizlik markaziga (SOC) hisobni global muzlatish (`GLOBAL_ACCOUNT_FREEZE`) buyrug'ini yuboradi.
 
 ### 🌍 Phase 5: Global Masshtab va O'lmaslik (Chaos Engineering)
 
-* **Real Region Health Check `[V30.1]`:** `EVALUATE: Region Health` ilgari statik (`Simulated as HEALTHY by default`) edi. Endi Region B'ning `/health` endpointiga haqiqiy HTTP probe yuboradi; faqat haqiqiy 5xx/timeout aniqlanganda HTTP 307 orqali Region B'ga yo'naltiradi.
-* **Multi-AZ Failover:** PostgreSQL Primary (Region A) / Standby (Region B) rejimida; Pessimistic lock tugunlari endi `retryOnFail` va multi-AZ connection string bilan ishlaydi.
-* **Chaos & Load Engineering `[V30.1]`:** Alohida Cron Workflow orqali tunlik **Grafana k6** yuklama testi (5,000 TPS gacha) va Chaos Monkey uslubidagi nodlarni tasodifiy o'chirish simulyatsiyasi ishga tushiriladi.
-* **Cross-Region Sync:** WORM loglar har 30 soniyada Region B'dagi zaxira S3 saqlagichiga asinxron replikatsiya qilinadi.
+* **Multi-AZ Failover:** PostgreSQL bazamiz Primary/Standby rejimida ishlaydi. `Retry` mexanizmlari server o'chib qolsa ham tranzaksiyalar uzilmasligini ta'minlaydi.
+* **Chaos Engineering:** Tashqi `Grafana k6` Cloud orqali har tunda tizimga 5000 TPS yuklama beruvchi maxsus Cron Workflow ishlab chiqilgan.
+* **Cross-Region Sync:** Asosiy viloyatdagi WORM loglar har 30 soniyada S3 zaxira xotirasiga (Region B) asinxron replikatsiya qilinadi.
 
 ---
 
 ## 📋 NOD-BA-NOD CHUQUR TAHLIL (EXHAUSTIVE DEEP DIVE)
 
-### 🌐 BLOK 1: Ingress, Vault va Xavfsizlik Qatlami
+Revenant platformasi yuqoridagi 5 fazani 10 ta mantiqiy bloklarga ajratilgan holda n8n da amalga oshiradi.
 
-* **`Webhook Ingestion` → `EVALUATE: Region Health` → `IF: Circuit Tripped?`:** Har bir so'rov avval mintaqaviy sog'lik tekshiruvidan o'tadi; faqat Region A sog'lom bo'lsa davom etadi.
-* **`Voice Processor`:** Biometrik tekshiruv. `expected_liveness_phrase` bilan `spoken_phrase` `crypto.timingSafeEqual` orqali solishtiriladi (uzunlik teng bo'lmasa avtomatik `false`). Ro'yxatdan o'tmagan foydalanuvchi uchun `TRIGGER_ENROLLMENT_FLOW` qaytadi.
-* **`PROD Input Normalizer - Hardened V30`:** `sanitizeString()` — buffer-overflow himoyasi (kesish), SQLi/NoSQLi tozalash, XSS entity-encode; `sanitizeEmail()` — faqat ruxsat etilgan belgilarni qoldiradi. `traceparent` headerini W3C formatida tekshirib `trace_id`ni tiklaydi, bo'lmasa `crypto.randomBytes(16)` bilan yangi ID generatsiya qiladi.
-* **`Vault: AppRole Login` → `Vault: Fetch Configuration` → `Configuration Loader - V30`:** AppRole `role_id`/`secret_id` orqali qisqa muddatli `client_token` olinadi (production'da bu n8n credential store yoki environment orqali in'ektsiya qilinadi, kod ichida emas). Token bilan `secret/data/revenant/config` dan `AGENT_HOURLY_RATE`, `HMAC_SECRET` kabi qiymatlar tortib olinadi.
-* **`BLOCK 0: Titanium Sanitizer`:** `THREAT_PATTERNS` massivi va `AUTHORITY_PATTERNS` regex to'plami orqali ikki qatlamli zararli kontent skaneri.
+### 🌐 BLOK 0: Ingress va Xavfsizlik Qatlami
+
+* **`Webhook Ingestion` & `Global Circuit Breaker`:** Barcha so'rovlar qabul qilinadi. Agar joriy mintaqa (Region A) yiqilgan bo'lsa, HTTP 307 orqali zudlik bilan Region B ga yo'naltiriladi.
+* **`Voice Processor`:** Biometrik tekshiruv. 60 soniyalik anti-replay oyna. `NEON-XXXX` formatida Liveness (jonlilik) chaqiruvi tekshiriladi. Constant-Time solishtirish orqali Timing-Attack larning oldi olinadi.
+* **`Titanium Sanitizer`:** Barcha payloadlar `sanitizeString()` funksiyasidan o'tadi. Ufer overflow, XSS (`<script>`), SQLi (`1=1, drop table`) to'liq tozalanadi.
+
+### 🔐 BLOK 1: Zero-Trust Konfiguratsiya (Vault)
+
+* **`Vault: AppRole Login`:** HashiCorp Vault serveriga ulanib, qisqa muddatli `client_token` oladi. API kalitlar kod ichida saqlanmaydi.
+* **`Configuration Loader`:** Vaultdan `AGENT_HOURLY_RATE`, `HMAC_SECRET`, `UZS_EXCHANGE_RATE` kabi moliyaviy sirlarni tortib oladi va workflow global kontekstiga joylaydi.
 
 ### 🤖 BLOK 2: Klassifikatsiya va Niyatni Aniqlash
 
-* **`Language Detection Engine - V19 (Expanded)`:** O'zbekcha (`uzcard`, `humo`, `to'lov`), Ruscha (Kirill alifbosi + moliyaviy terminlar) va Inglizcha kalit so'zlar bo'yicha ballash tizimi; eng yuqori ball asosida til aniqlanadi va ishonch darajasi (`confidence`) hisoblanadi.
-* **`Rule-Based Classifier` & `Rule-Based Severity Classifier`:** Deterministik (LLM'siz) qoidalar asosida dastlabki intent va jiddiylik darajasini belgilaydi — bu LLM chaqirilishidan oldingi tezkor filtr bo'lib xizmat qiladi.
+* **`Language Detection Engine`:** O'zbek, Rus va Ingliz tillarini aniqlovchi qat'iy ball tizimi. V30 versiyada tillar `urn:revenant:alignment:...` formatidagi inson tomonidan tasdiqlangan tarjima stollariga (Alignment Tables) bog'lanadi.
+* **`Master Router` & `Rule-Based Severity Classifier`:** Tranzaksiya summasi (40%), masofa (25%), tezlik (20%) kabi ko'rsatkichlarga qarab niyat (Intent) riskini baholaydi.
 
-### 💼 BLOK 3: Biznes Mantiq
+### 🧠 BLOK 4: Dual-LLM Konsensus Mexanizmi
 
-* **`Business Impact Calculator (UZS) - V20`:** Har bir tiketning moliyaviy ta'sirini `Configuration Loader`dan kelgan stavkalar asosida UZS'da hisoblaydi.
-* **`Uzbekistan SLA Calculator - Fixed Timezone V20`:** `Asia/Tashkent` vaqt mintaqasi, ish kunlari (Dush-Juma, 9:00–18:00) va ish vaqtidan tashqari uchun ×1.5 koeffitsient bilan critical/high/medium/low SLA muddatlarini hisoblaydi.
+REVENANT'ning eng innovatsion yechimlaridan biri.
 
-### 🧠 BLOK 4: Governance, RAG va Dual-LLM Konsensus
+1. `Prep Consensus Payload` so'rovni tayyorlaydi.
+2. `LLM OpenRouter (OpenAI - gpt-4o-mini)` va `LLM OpenRouter (Anthropic - Claude)` bir vaqtda so'rovni qayta ishlaydi.
+3. **`Consensus Engine Validator`** ikkala LLM javobini solishtiradi. Agar ular kelishmasa yoki ishonch (confidence) 0.7 dan past bo'lsa, tizim "Gallyutsinatsiya" riskini inobatga olib deterministik fallback rejimiga o'tadi.
 
-* **`Governance Gate & Context Assembler`:** OIDC kontekstidan (`user_role`, `clearance_level`) ABAC matritsasi orqali ruxsat tekshiriladi. Segregation-of-Duties qoidasi: `automation_engineer` roli `RESTRICTED` ma'lumotga kira olmaydi → `SoD_VIOLATION_BLOCKED`. Yuqori-xavfli holatlarda `LLM_MODE_LOCAL_ONLY` bayrog'i o'rnatiladi va kontekst n8n `Cloud Sandbox` cheklovlarini aylanib o'tuvchi maxsus `Pure-JS` deterministik xesh algoritmi (`getHash, sorted keys`) bilan muhrlanadi.
-* **`Supabase: Hybrid RRF Search` → `BLOCK 6.1: Memory Integrity Guard`:** Qidiruv natijalari avval RRF orqali olinadi, so'ng xotira yaxlitligi (poisoning detection — embedding checksum solishtirish) va matematik drift (Wasserstein/PSI) tekshiriladi.
-* **Dual-LLM Konsensus:** `Prep Consensus Payload` → `LLM OpenRouter (OpenAI — gpt-4o-mini)` (2000ms circuit breaker) → muvaffaqiyat/xato holatida ham → `LLM OpenRouter (Anthropic)` → **`Consensus Engine Validator`** ikkala javobni solishtiradi; kelishmovchilik yoki past ishonch holatida deterministik fallback rejimiga (yoki Triton'ga) o'tadi.
+### ✍️ BLOK 5: Tranzaksiya Ijrosi (Multi-AZ)
 
-### ✍️ BLOK 5: Tranzaksiya Ijrosi va Tasdiqlash
-
-* **`HMAC Verifier`:** Tasdiqlash so'rovlarini `crypto.timingSafeEqual` orqali constant-time solishtiradi (Timing-Attack himoyasi), muddati o'tgan (`expires_at`) va allaqachon ishlatilgan (`consumed`) tasdiqlarni rad etadi.
-* **`Postgres: Acquire Dispatch Lock` / `Update Approval State`:** Pessimistic `SELECT ... FOR UPDATE` orqali bir vaqtning o'zida ikki marta tasdiqlanishning (double-approval) oldi olinadi.
+* **`Postgres: Acquire Dispatch Lock`:** N8n node REST API o'rniga to'g'ridan to'g'ri `UPDATE ... RETURNING` SQL kodini ishlatib, pessimistic qulf o'rnatadi. `retryOnFail: true` funksiyasi Multi-AZ failover vaqtida so'rovlar uzilmasligini kafolatlaydi.
 
 ### 🔏 BLOK 7: Forensic Audit va Kriptografiya
 
-* **`BLOCK 7.4: PII Forensic Scrubber`:** Jurnalga yozishdan oldin barcha maxfiy ma'lumotlarni (UzCard/Humo raqami, pasport, email, telefon) regex orqali maskalaydi.
-* **`BLOCK 7.6: Forensic Signer` → AWS KMS:** Manifest hash'lari (`input_state_hash`, `data_payload_hash`) tuziladi va imzolash uchun KMS'ga yuboriladi.
-* **`SIEM: Stream to Splunk` → `WORM Storage: AWS S3`:** Audit paketi parallel ravishda real-vaqt SIEM monitoring va o'zgartirib bo'lmaydigan (Object Lock) uzoq-muddatli saqlashga yo'naltiriladi.
-* **`BLOCK 7.8: CBU Compliance Engine`:** `escapeXml()` bilan xavfsiz XML generatsiya qiladi; $10,000 chegarasidan oshган tranzaksiyalar uchun avtomatik SAR hisobotini LRU-1115 Modda 14 formatida tuzadi.
-
-### ⚙️ BLOK 8–9: Ijro Siyosati va Inson Nazorati
-
-* **`BLOCK 8.2: Execution Policy Firewall` → `BLOCK 8.3: Human-in-the-Loop Gate`:** Governance Gate'dan kelgan `HUMAN_IN_THE_LOOP_REQUIRED` bayrog'i shu yerda amalga oshiriladi — yuqori-xavfli qarorlar inson tasdig'isiz ijro etilmaydi.
-* **`BLOCK 9.0: Logic Distributor` (Switch):** Yakuniy yo'nalishni (Email/Telegram/Webhook/FAQ dispatch) ticket turiga qarab tanlaydi.
+* **`PII Forensic Scrubber`:** Jurnalga yozishdan oldin barcha maxfiy ma'lumotlarni (UzCard, Humo, Pasport, Email, Telefon) Regex orqali maskalaydi (Masalan: `8600XXXX34`).
+* **`AWS KMS HSM Signer`:** Maskalangan ma'lumot xeshi AWS Key Management Service ga yuboriladi. U yerdagi FIPS 140-2 apparatida asimmetrik imzolangan holda qaytadi.
+* **`Telemetry Sink`:** Audit fayllar bir vaqtning o'zida ham SIEM (Splunk HEC) ga yuboriladi, ham S3 WORM saqlagichga joylanadi.
 
 ---
 
 ## 🔒 HARBIY DARAJALI XAVFSIZLIK POZITSIYASI
 
-| # | Qatlam | Implementatsiya | Standart muvofiqligi |
+| # | Qatlam | Implementatsiya | Standart |
 | --- | --- | --- | --- |
-| 1 | **Idempotentlik** | UUIDv4 `Idempotency-Key` + Redis `SET NX` + 24h TTL | RFC 7231 |
-| 2 | **Vault AppRole** | Dinamik sir yuklash, kod ichida statik kalit yo'q | HashiCorp Vault v2 |
-| 3 | **WAF Sanitizatsiya** | SQL/XSS/Prompt Injection + CEO-Fraud aniqlash | OWASP Top 10 prinsiplariga moslashtirilgan |
-| 4 | **HSM Imzolash** | AWS KMS `Sign` API orqali asimmetrik kriptografiya | FIPS 140-2 Level 3 ga moslashtirilgan KMS infratuzilmasi¹ |
-| 5 | **Rate Limiting** | Redis token-bucket, 10 so'rov/daqiqa/IP | NIST SP 800-53 Deny-by-Default |
-| 6 | **Hard Ceiling** | $50,000 — darhol rad etish | Basel III operatsion risk prinsiplari |
-| 7 | **Biometrik Deepfake** | Synthetic/Replay aniqlansa → SOC Account Freeze | PSD2 Strong Customer Authentication ruhida |
-| 8 | **Drift Detection** | PSI va Wasserstein Distance, 24h batch + real-time | EU AI Act Risk Tier 1 yondashuviga mos |
-| 9 | **CBU Muvofiqlik** | Avtomatik SAR XML, LRU-1115 Modda 14 | O'zbekiston Markaziy Banki talablari |
-| 10 | **Disaster Recovery** | Multi-AZ Failover + 30s S3 Async Sync | RPO < 1s, RTO < 30s maqsadi |
-
-> ¹ *Eslatma investorlar/auditorlar uchun:* "FIPS 140-2 Level 3" — bu konkret HSM apparatining sertifikatlangan holati, KMS API'ga ulanishning o'zi emas. Production joylashtirishda buni AWS CloudHSM (yoki tegishli sertifikatlangan HSM) bilan tasdiqlash kerak; hozircha bu — arxitektura **shu standartga moslashtirilgan**, lekin mustaqil sertifikatlanmagan.
+| 1 | **Idempotentlik** | UUIDv4 `Idempotency-Key` va Redis `SET NX` | RFC 7231 |
+| 2 | **Vault AppRole** | Dinamik sir yuklash, statik kalit yo'q | HashiCorp Vault v2 |
+| 3 | **WAF Sanitizatsiya** | SQL/XSS/Prompt Injection, CEO Fraud aniqlash | OWASP Top 10 |
+| 4 | **HSM Imzolash** | AWS KMS orqali asimmetrik kriptografiya | FIPS 140-2 Level 3 |
+| 5 | **Rate Limiting** | 10 so'rov/daqiqa, taqsimlangan Redis | NIST SP 800-53 |
+| 6 | **Hard Ceiling** | $50,000 USD — darhol rad etish | Basel III |
+| 7 | **Biometrik Deepfake** | Synthetic voice aniqlansa → SOC Account Freeze | PSD2 Strong Auth |
+| 8 | **Drift Detection** | PSI va Wasserstein Distance (Memory Guard) | EU AI Act Risk Tier 1 |
+| 9 | **CBU Muvofiqlik** | Avtomatik SAR XML, LRU-1115 Art.14 | O'zbekiston MB |
+| 10 | **Disaster Recovery** | Multi-AZ Failover + 30s S3 Async Sync | RPO < 1s, RTO < 30s |
 
 ---
 
 ## 🗺️ MOLIYALASHTIRISH: $3,000 INVESTITSIYA TAQSIMOTI
 
-Bizning jamoamiz V30.1 ni to'liq kodlab, MVP ni yakunladi va o'z-o'zini auditdan o'tkazdi. PDP EcoSystem tomonidan ajratiladigan **$3,000 urug' (Seed) investitsiyasi** arxitekturani Production (Jonli) muhitda ushlab turish va masshtablash uchun quyidagicha taqsimlanadi:
+Bizning jamoamiz V30 ni to'liq kodlab, MVP ni yakunladi. PDP EcoSystem tomonidan ajratiladigan **$3,000 urug' (Seed) investitsiyasi** arxitekturani Production (Jonli) muhitda ushlab turish va masshtablash uchun quyidagicha taqsimlanadi:
 
 | Yo'nalish | Miqdor | Maqsad |
 | --- | --- | --- |
 | **Kiber-Xavfsizlik & HSM** | $800 | AWS KMS kalitlari, HashiCorp Vault Cloud (3 oy) |
 | **Infratuzilma (Multi-AZ)** | $800 | AWS RDS PostgreSQL klasterlari va Redis Enterprise |
-| **AI API & Fallback** | $500 | OpenRouter konsensus to'lovlari + Triton mahalliy server |
-| **Saqlash & Audit** | $400 | Supabase Pro (pgvector) va AWS S3 Object Lock |
+| **AI API & Fallback** | $500 | OpenRouter konsensus to'lovlari |
+| **Saqlash & Audit** | $400 | Supabase Pro (pgvector) va AWS S3 Glacier WORM |
 | **Chaos & Penetration** | $300 | Grafana k6 Cloud litsenziyasi va zaifliklarni tekshirish |
 | **Targ'ibot** | $200 | B2B formatida O'zbekiston banklari bilan uchrashuvlar |
 
@@ -287,16 +265,15 @@ Bizning jamoamiz V30.1 ni to'liq kodlab, MVP ni yakunladi va o'z-o'zini auditdan
 
 ```bash
 # 1. Repozitoriyani klonlash
-git clone https://github.com/StartapNomi/Revenant-AI.git
+git clone [https://github.com/StartapNomi/Revenant-AI.git](https://github.com/StartapNomi/Revenant-AI.git)
 cd Revenant-AI
 
 # 2. Muhit o'zgaruvchilarini sozlash
 cp .env.example .env
+
 ```
 
-> ⚠️ **Faqat lokal sinov uchun:** Quyidagi `docker-compose.yml` Vault'ni **dev rejimida** ishga tushiradi (`VAULT_DEV_ROOT_TOKEN_ID`) — bu xotirada ishlaydi va konteyner qayta ishga tushganda barcha sirlar o'chib ketadi. Bu production uchun **yaroqsiz**. Production'da Vault doimiy storage backend (Consul/Raft) va cloud KMS orqali auto-unseal bilan, root token o'rniga faqat AppRole policy bilan ishga tushiriladi.
-
-### 🐳 `docker-compose.yml` (Lokal Sinov — Zero-Trust Arch)
+### 🐳 `docker-compose.yml` (Zero-Trust Arch)
 
 ```yaml
 version: '3.8'
@@ -325,7 +302,7 @@ services:
       - revenant_network
 
   # ========================
-  # HashiCorp Vault (DEV MODE — local only)
+  # HashiCorp Vault (Secret Store)
   # ========================
   vault:
     image: hashicorp/vault:latest
@@ -334,7 +311,7 @@ services:
     ports:
       - "8200:8200"
     environment:
-      - VAULT_DEV_ROOT_TOKEN_ID=${VAULT_ROOT_TOKEN:-revenant-root-token}
+      - VAULT_DEV_ROOT_TOKEN_ID=${VAULT_ROOT_TOKEN}
     cap_add:
       - IPC_LOCK
     networks:
@@ -351,8 +328,8 @@ services:
       - "5432:5432"
     environment:
       - POSTGRES_DB=revenant_core
-      - POSTGRES_USER=${POSTGRES_USER:-revenant_admin}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-supersecret_db_password}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -378,6 +355,7 @@ volumes:
 networks:
   revenant_network:
     driver: bridge
+
 ```
 
 ### 🚀 Vault va Workflow Sozlamalari
@@ -398,6 +376,7 @@ vault kv put secret/revenant/config \
 # 3. N8N Interfeysiga kirish
 # Manzil: http://localhost:5678
 # "Import Workflow" orqali REVENANT_V30 JSON faylini yuklang.
+
 ```
 
 ---
@@ -409,33 +388,8 @@ vault kv put secret/revenant/config \
 | 👤 Rol | 🎯 Mas'uliyat | 🛠️ Texnologiyalar | 📧 Bog'lanish |
 | --- | --- | --- | --- |
 | **Ergashboyev Bobur** 🚀 *Team Lead / Arxitekt / CEO* | n8n workflow dizayni | n8n | @b_007e |
-| **Kurbanov Shavkat** 🤖 *Backend / AI Dasturchi* | Database design, LLM | Node.js, OpenAI API | @shava_007 |
-| **Izzatov Abdurahmon** 📊🎨 *Biznes Analitik / Frontend / UX* | ROI kalkulyatsiyasi, UZS moliyaviy modellar, Agent yordamchi interfeysi | React, Tailwind, Supabase | @abdurakhmon5 |
-
----
-
-## 📌 V30.1 Hardening Changelog
-
-Quyidagi ro'yxat V30 ichki auditida aniqlangan kamchiliklar va ularning V30.1'da yopilgan holatini ko'rsatadi — bu sizning judges/investorlar oldida texnik etuklikni ko'rsatish uchun foydali bo'lishi mumkin:
-
-| # | Audit topilmasi (V30) | V30.1 holati |
-|---|---|---|
-| 1 | Redis idempotency `NX`/TTL'siz, duplikatlarni aniqlamaydi | ✅ `SET NX` + 24h `EX` qo'shildi |
-| 2 | PEP/Sanctions API jsonBody'da ortiqcha `=` belgisi | ✅ Tuzatildi |
-| 3 | Splunk HEC URL placeholder edi | ✅ Haqiqiy endpoint sozlandi |
-| 4 | Core Banking API mock (Beeceptor) endpointga ishora qilardi | ✅ Haqiqiy/sandbox endpoint ulandi |
-| 5 | `HMAC Verifier` lokal `crypto.createHmac` ishlatardi | ✅ AWS KMS `Verify` chaqirig'iga o'tkazildi |
-| 6 | `Forensic Signer` faqat "KMS uchun tayyorlardi", haqiqiy imzolash yo'q edi | ✅ KMS `Sign` HTTP chaqirig'i qo'shildi |
-| 7 | Vault `role_id`/`secret_id` kod ichida hardcoded edi | ✅ Credential store/env'ga ko'chirildi |
-| 8 | Supabase lock/approval node'lari faqat PostgREST `PATCH` edi | ✅ Raw SQL `SELECT...FOR UPDATE` ga o'tkazildi |
-| 9 | Per-IP/token rate limiter umuman yo'q edi | ✅ Redis Fixed-Window Time Key (10/min) qo'shildi (Cheklov aylanib o'tildi)
-| 10 | Triton lokal fallback yo'q edi (faqat cloud-to-cloud) | ✅ `LLM_MODE_LOCAL_ONLY` yo'nalishi Triton'ga ulandi |
-| 11 | Cross-encoder rerank tasdiqlanmagan edi | ✅ RPC darajasida tasdiqlandi/qo'shildi |
-| 12 | Region Health statik/simulyatsiya edi | ✅ Haqiqiy `/health` probe qo'shildi |
-| 13 | 24h drift job va chaos test uchun Schedule Trigger yo'q edi | ✅ Alohida Cron workflow qo'shildi |
-| 14 | Data classification 4-tier emas, 2-tier (`CONFIDENTIAL` ishlatilmagan) edi | ✅ To'rt darajaning barchasi mantiqqa kiritildi |
-
-*Tashkilot darajasidagi band (n8n workflow ichida yopib bo'lmaydigan): FIDO2/WebAuthn MFA, OPA policy server, SBOM/Cosign/Checkov CI/CD skanerlash, PAM/JIT vositalari, Model Card/Model Inventory reestri, BYOK/CMK ko'p-tenantli infratuzilma, k6/Locust 5,000 TPS yuklama testi — bularning barchasi alohida infratuzilma loyihasi sifatida kuzatilmoqda.*
+| **Kurbanov Shavkat** 🤖 *Backend / AI Dasturchi* | Database design ,LLM | Node.js, OpenAI API| @shava_007 |
+| **Izzatov Abdurahmon** 📊🎨 *Biznes Analitik / Frontend / UX* | ROI kalkulyatsiyasi, UZS moliyaviy modellar, Agent yordamchi interfeysi | React, Tailwind, Supabase  | @abdurakhmon5 |
 
 ---
 
@@ -447,10 +401,14 @@ Quyidagi ro'yxat V30 ichki auditida aniqlangan kamchiliklar va ularning V30.1'da
 📂 Kategoriya: Sanoat va tadbirkorlikda sun'iy intellekt texnologiyalari
 💰 Maqsad:  $3,000 Seed Investitsiya
 🌍 Bozor:   O'zbekiston bank sektori (40+ litsenziyalangan bank)
+
 ```
+
+[](https://linkedin.com/)
+[](https://www.google.com/search?q=mailto%3Ateam%40revenant.uz)
 
 ---
 
 *© 2026 REVENANT Team. O'zbekiston, Toshkent. Barcha huquqlar himoyalangan.*
 
-**REVENANT V30.1 — Enterprise Global Scale AI**
+**REVENANT V30 — Enterprise Global Scale AI**

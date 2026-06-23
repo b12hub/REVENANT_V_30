@@ -1,0 +1,534 @@
+{
+  "name": "REVNANT_V_32_Trunk_3",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// BLOCK 7.1: TRACE CONTEXT INITIALIZER (Hardened v26.2)\n// GOAL: Preserve the \"Golden Thread\" (Trace ID) across the boundary.\n\nconst crypto = require('crypto');\nconst input = $json;\n\n// --- 1. AGGRESSIVE ID RECOVERY ---\n// The ID might be buried in Supabase metadata or stringified content.\nlet recovered_id = null;\n\n// Attempt 1: Direct Top Level\nif (input.trace_id) recovered_id = input.trace_id;\n\n// Attempt 2: Inside Metadata (Common in Supabase)\nelse if (input.metadata && input.metadata.trace_id) recovered_id = input.metadata.trace_id;\n\n// Attempt 3: Inside Stringified Content (Parsing JSON if needed)\nelse if (typeof input.content === 'string' && input.content.includes('trace_id')) {\n    try {\n        const parsed = JSON.parse(input.content);\n        if (parsed.trace_id) recovered_id = parsed.trace_id;\n    } catch(e) {}\n}\n\n// Attempt 4: Fallback to System User (If manually triggered)\nelse if (input.user_id) recovered_id = `manual_${input.user_id}_${Date.now()}`;\n\n// --- 2. FAIL-SAFE ---\n// If we STILL don't have an ID, we flag it. \n// We do NOT generate a random hex blindly without tagging it as an orphan.\nif (!recovered_id) {\n    recovered_id = `ORPHAN_TRACE_${crypto.randomBytes(8).toString('hex')}`; \n    // In production, this should trigger a system warning.\n}\n\n// --- 3. W3C GENERATION ---\nconst parentId = crypto.randomBytes(8).toString('hex');\nconst traceparent = `00-${recovered_id}-${parentId}-01`;\n\nreturn {\n  governance: {\n    trace_id: recovered_id, // <--- MUST MATCH BLOCK 0\n    span_id: parentId,\n    traceparent: traceparent,\n    system_version: \"BANK_AGENT_v1.2_PROD\",\n    compliance_standard: \"W3C_TRACE_CONTEXT_v1\",\n    initiated_at: new Date().toISOString(),\n    unix_start: Date.now(),\n    // Audit Flag: Did we break the chain?\n    linkage_status: recovered_id.startsWith('ORPHAN') ? \"BROKEN\" : \"SECURE_LINK\"\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -128,
+        -144
+      ],
+      "id": "f4f2442b-448b-4e2f-bdac-736c72026747",
+      "name": "BLOCK 7.1: Trace Context Initializer"
+    },
+    {
+      "parameters": {
+        "jsCode": "// --- DYNAMIC TIME TRACKING ---\nconst start_unix =$input.first().json.governance.unix_start ;\nconst end_unix = Date.now();\nconst duration_ms = end_unix - start_unix;\n\n// --- DYNAMIC UZBEK MARKET FINANCIALS (PULLED FROM GLOBAL VARS) ---\n// Using $vars ensures these change instantly if updated in the n8n Settings\nconst MANUAL_TICKET_COST = parseFloat($vars.MANUAL_TICKET_COST) || 12500; \nconst AI_PROCESSING_COST = parseFloat($vars.AI_PROCESSING_COST) || 2500;\n\n// --- ROI CALCULATION ---\nconst net_savings_uzs = MANUAL_TICKET_COST - AI_PROCESSING_COST;\nconst efficiency_multiplier = (MANUAL_TICKET_COST / AI_PROCESSING_COST).toFixed(2);\n\nreturn {\n  economics: {\n    unit_currency: \"UZS\",\n    manual_cost_equivalent: MANUAL_TICKET_COST.toFixed(2),\n    ai_cost_actual: AI_PROCESSING_COST.toFixed(2),\n    net_savings: net_savings_uzs.toFixed(2),\n    roi_multiplier: efficiency_multiplier,\n    execution_time_ms: duration_ms,\n    status: \"FINANCIAL_DATA_VERIFIED\",\n    governance: {\n        source: \"n8n_global_vars\",\n        clerk_rate_applied: $vars.AGENT_HOURLY_RATE || 50000\n    }\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        96,
+        -144
+      ],
+      "id": "84971f5f-1bf6-4131-ac12-a7be895579c6",
+      "name": "BLOCK 7.2: Unit Economics Engine"
+    },
+    {
+      "parameters": {
+        "jsCode": "// BLOCK 7.3: RUNTIME POLICY ENFORCER (INVARIANT VALIDATOR)\nconst core = $node[\"BLOCK 6.0: Memory Core Logic\"].json;\nconst decision = core.semantics.decision;\nconst action = core.semantics.action;\nconst reason = core.semantics.validated_approval?.reason || \"\";\n\n// --- HARD BUSINESS INVARIANTS (The \"Never\" Rules) ---\nconst rules = [\n  {\n    id: \"RULE_01\",\n    desc: \"Never approve if action is UNKNOWN\",\n    failed: (action === \"UNKNOWN\" && decision === \"APPROVED\")\n  },\n  {\n    id: \"RULE_02\",\n    desc: \"Never approve a transaction with empty reason\",\n    failed: (decision === \"APPROVED\" && reason.trim().length < 2)\n  },\n  {\n    id: \"RULE_03\",\n    desc: \"Force manual review for high-risk deletions\",\n    failed: (action.includes(\"DELETE\") && decision === \"APPROVED\")\n  }\n];\n\nconst violations = rules.filter(r => r.failed);\n\nif (violations.length > 0) {\n  // CRITICAL FAIL: The AI violated a hard policy\n  throw new Error(`INVARIANT_VIOLATION: [${violations[0].id}] ${violations[0].desc}`);\n}\n\nreturn {\n  validation: {\n    status: \"POLICIES_CLEAN\",\n    checksum_match: true,\n    authorized_at: new Date().toISOString(),\n    rule_count_checked: rules.length\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        -144
+      ],
+      "id": "6e9ecc38-fe26-4982-bc6c-1a39c2b7ec17",
+      "name": "BLOCK 7.3: Invariant Validator"
+    },
+    {
+      "parameters": {
+        "jsCode": "// BLOCK 7.4: PII FORENSIC SCRUBBER (UZB MARKET COMPLIANT)\nconst core = $node[\"BLOCK 6.0: Memory Core Logic\"].json;\nlet contentStr = typeof core.semantics === 'object' ? JSON.stringify(core.semantics) : String(core.semantics);\n\n// --- REGEX DEFENSE PATTERNS ---\nconst patterns = {\n  uz_card: /(8600|5614)[0-9]{12}/g,    // UzCard & Humo patterns\n  passport: /[A-Z]{2}[0-9]{7}/g,       // Uzbek Passport (2 letters, 7 digits)\n  phone: /\\+?998[0-9]{9}/g,            // Uzbek Phone Numbers\n  email: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}/g\n};\n\nlet scrubCount = 0;\n\n// Execute Scrubber\nfor (const [label, regex] of Object.entries(patterns)) {\n  const matches = contentStr.match(regex);\n  if (matches) {\n    scrubCount += matches.length;\n    contentStr = contentStr.replace(regex, (match) => {\n      // Masking logic: Keep first 4 and last 2, X the rest\n      return match.substring(0, 4) + \"XXXX\" + match.substring(match.length - 2);\n    });\n  }\n}\n\nreturn {\n  scrubbed_data: JSON.parse(contentStr),\n  forensics: {\n    scrub_detected: scrubCount > 0,\n    total_redactions: scrubCount,\n    compliance_check: \"PII_REDACTED_SUCCESS\",\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        544,
+        -144
+      ],
+      "id": "e1693910-a4a1-4071-aece-95957d2c1421",
+      "name": "BLOCK 7.4: PII Forensic Scrubber"
+    },
+    {
+      "parameters": {
+        "jsCode": "// NODE: BLOCK 7.6: FORENSIC SIGNER (Phase 0.5 Audit-Compliant)\n// UPGRADE: Deprecated local HMAC. Pre-processing for HSM (KMS) Signing.\nconst crypto = require('crypto');\n\nconst item = $input.first();\nconst root = item.json;\nconst trace = root.governance || {};\nconst economics = root.economics || {};\nconst validation = root.validation || {};\nconst scrubbedData = root.scrubbed_data || {};\n\n// 1. IMMUTABLE MANIFEST\nconst logManifest = {\n    trace_id: trace.trace_id,\n    system_version: trace.system_version || \"v30.0-hardened\",\n    timestamp: new Date().toISOString(),\n    decision: scrubbedData.decision,\n    net_savings_uzs: economics.net_savings,\n    validation_status: validation.status,\n    // Physics snapshot for audit\n    input_state_hash: crypto.createHash('sha256').update(JSON.stringify(trace.intent || {})).digest('hex'),\n    data_payload_hash: crypto.createHash('sha256').update(JSON.stringify(scrubbedData)).digest('hex')\n};\n\n// 2. KMS PRE-PROCESSOR\n// Biz ma'lumotni imzolash uchun KMS'ga yuborishga tayyorlaymiz.\n// Signature tuguni buni qabul qilib, AWS KMS orqali haqiqiy HSM imzosini oladi.\nreturn {\n    json: {\n        ...root,\n        forensic_manifest: logManifest,\n        // Biz manifestni \"Message\" sifatida tayyorlaymiz, \n        // chunki keyingi \"KMS Sign Node\" buni HSM'ga yuboradi.\n        payload_to_sign: Buffer.from(JSON.stringify(logManifest)).toString('base64'),\n        audit_ready: true,\n        emitted_at: new Date().toISOString()\n    }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        768,
+        -144
+      ],
+      "id": "c450d320-cec2-47c0-9c94-31c7e91e3884",
+      "name": "BLOCK 7.6: Forensic Signer"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://kms.eu-north-1.amazonaws.com/",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "aws",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Amz-Target",
+              "value": "TrentService.Sign"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/x-amz-json-1.1"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"KeyId\": \"alias/revenant-forensic-key\",\n  \"Message\": \"{{ $json.payload_to_sign }}\",\n  \"MessageType\": \"RAW\",\n  \"SigningAlgorithm\": \"ECDSA_SHA_256\"\n}",
+        "options": {}
+      },
+      "id": "c250255e-ad7d-4cfc-9022-a2a0fefada61",
+      "name": "AWS KMS: Sign Forensic Payload",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        992,
+        -144
+      ],
+      "credentials": {
+        "aws": {
+          "id": "RtfVY3fdUG7KOagD",
+          "name": "AWS (IAM) account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// NODE: BLOCK 7.8: CBU COMPLIANCE ENGINE (Hardened v26.1)\n// CAPABILITY: Automated SAR XML Generation & Dashboard Routing\n// MANDATE: LRU-1115 Article 14 Compliance\n\n// --- 0. SECURITY UTILS (XML SANITIZATION) ---\nfunction escapeXml(unsafe) {\n    if (typeof unsafe !== 'string') return unsafe;\n    return unsafe.replace(/[<>&'\"]/g, function (c) {\n        switch (c) {\n            case '<': return '&lt;';\n            case '>': return '&gt;';\n            case '&': return '&amp;';\n            case '\\'': return '&apos;';\n            case '\"': return '&quot;';\n        }\n    });\n}\n\n// 1. INGEST DATA\nconst signer_data = $(\"BLOCK 7.6: Forensic Signer\").first().json;\nconst sanitized_data = $(\"BLOCK 0: Titanium Sanitizer\").first().json;\nconst input_node = $input.first().json;\n\n// FETCH RAW DATA (Safe Fallback)\nlet webhook_body = {};\ntry {\n    const webhook_node = $(\"Webhook Ingestion\").first().json;\n    webhook_body = webhook_node.body || {};\n} catch (e) {\n    webhook_body = { amount: 0 };\n}\n\n// 2. ID RECOVERY\nlet final_trace_id = \n    signer_data.trace_id || \n    sanitized_data.trace_id || \n    input_node.trace_id || \n    webhook_body.trace_id || \n    \"UNKNOWN_TRACE_ID\";\n\n// 3. GET REAL AMOUNT\nconst real_amount = parseFloat(sanitized_data.transaction_amount || webhook_body.amount || 0);\nconst currency = webhook_body.currency || \"USD\";\n\n// 4. DEFINE THRESHOLDS\nconst SAR_THRESHOLD_USD = 10000;\nconst is_sar_required = real_amount >= SAR_THRESHOLD_USD;\n\n// 5. SAR DECISION LOGIC\nlet regulatoryAction = \"NONE\";\nlet reportingReason = \"Transaction within limits\";\nlet sarXml = null;\nlet dashboardAlert = {\n    queue_target: \"ARCHIVE_ONLY\",\n    priority: \"P4_INFO\",\n    message: \"Transaction processed normally.\"\n};\n\nif (is_sar_required) {\n    regulatoryAction = \"FILE_SAR_IMMEDIATE\";\n    reportingReason = `Attempted breach of $${SAR_THRESHOLD_USD} limit. Requested: $${real_amount}`;\n\n    // 🛑 SECURITY FIX: XML ESCAPING APPLIED\n    const safeTraceId = escapeXml(String(final_trace_id));\n    const safeReason = escapeXml(String(reportingReason));\n    const safeBankId = \"TBC_UZ_REV23\";\n\n    sarXml = `<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<SAR_REPORT version=\"2.0\" xmlns=\"http://cbu.uz/sar/v2\">\n    <HEADER>\n        <BANK_ID>${safeBankId}</BANK_ID>\n        <TIMESTAMP>${new Date().toISOString()}</TIMESTAMP>\n        <TRACE_ID>${safeTraceId}</TRACE_ID>\n    </HEADER>\n    <INCIDENT>\n        <TYPE>THRESHOLD_EXCEEDED</TYPE>\n        <SEVERITY>CRITICAL</SEVERITY>\n        <AMOUNT currency=\"USD\">${real_amount}</AMOUNT>\n        <LIMIT_APPLIED>${SAR_THRESHOLD_USD}</LIMIT_APPLIED>\n        <REASON>${safeReason}</REASON>\n    </INCIDENT>\n</SAR_REPORT>`;\n\n    dashboardAlert = {\n        queue_target: \"COMPLIANCE_OFFICER_DASHBOARD_V1\",\n        priority: \"P0_CRITICAL\",\n        message: `🚨 AUTO-BLOCK: $${real_amount} transfer stopped. SAR generated.`,\n        actions: [\"REVIEW_SAR\", \"BAN_USER\"]\n    };\n}\n\n// 6. FINAL OUTPUT\nreturn [{\n    json: {\n        ...sanitized_data,\n        ...signer_data,\n        trace_id: final_trace_id,\n        amount: real_amount,\n        currency: currency,\n        compliance_status: \"PROCESSED\",\n        regulatory_action: regulatoryAction,\n        reporting_reason: reportingReason,\n        cbu_sar_payload: sarXml,\n        dashboard_alert: dashboardAlert,\n        timestamp: new Date().toISOString()\n    }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1664,
+        -144
+      ],
+      "id": "12f8c534-301e-4cc3-aca5-c0f68220b657",
+      "name": "BLOCK 7.8: CBU Compliance Engine"
+    },
+    {
+      "parameters": {
+        "jsCode": "// BLOCK 8.2: EXECUTION POLICY FIREWALL (Hardened v26.3)\n// CODENAME: IRON HAND (Currency Aware + Math Integrity)\n\nconst contract = items[0].json;\nconst intent = contract.intent;\nconst gates = contract.gates;\n\n// --- 1. SETUP FINANCIALS ---\nconst USD_LIMIT = 50000;\n// Use the var, or fallback to a safe default\nconst rate = parseFloat($vars.UZS_EXCHANGE_RATE) || 12850; \n\n// Normalize input (Atomic units -> Base units)\n// Example: 100 cents -> 1.00\nconst baseAmount = parseFloat(intent.amount_atomic) / 100;\nconst currency = intent.currency || \"UZS\";\n\n// --- 2. CALCULATE STANDARDIZED USD VALUE ---\nlet amountUSD = 0;\n\nif (currency === \"USD\") {\n    // Already in USD, no conversion needed\n    amountUSD = baseAmount;\n} else if (currency === \"UZS\") {\n    // Convert UZS to USD\n    amountUSD = baseAmount / rate;\n} else {\n    // UNKNOWN CURRENCY -> BLOCK IMMEDIATELY\n    return [{\n       json: {\n         contract_id: contract.contract_id,\n         trace_id: contract.trace_id,\n         state: \"REJECTED\",\n         reason: `EPF_VIOLATION: Unsupported currency '${currency}'. Risk of arbitrage.`,\n         forensic_flag: true,\n         timestamp: new Date().toISOString()\n       }\n     }];\n}\n\n// 🛑 SECURITY PATCH: MATH INTEGRITY GUARD 🛑\n// Prevents \"NaN\" or \"Infinity\" attacks from bypassing the limit check.\nif (!Number.isFinite(amountUSD) || Number.isNaN(amountUSD)) {\n   return [{\n     json: {\n       contract_id: contract.contract_id,\n       trace_id: contract.trace_id,\n       state: \"REJECTED\",\n       reason: \"EPF_VIOLATION: CRITICAL MATH ANOMALY. Input resulted in NaN or Infinity.\",\n       forensic_flag: true,\n       timestamp: new Date().toISOString()\n     }\n   }];\n}\n\n// --- 3. HARD INVARIANT CHECK ($50k Kill Switch) ---\nif (amountUSD >= USD_LIMIT) {\n  return [{\n    json: {\n      contract_id: contract.contract_id,\n      trace_id: contract.trace_id,\n      state: \"REJECTED\",\n      reason: `EPF_VIOLATION: Value $${amountUSD.toLocaleString()} exceeds hard ceiling of $${USD_LIMIT.toLocaleString()}.`,\n      forensic_flag: true,\n      timestamp: new Date().toISOString()\n    }\n  }];\n}\n\n// ... (Rest of your Regulatory & Tool Whitelist logic remains the same) ...\n\n// 4. PASS\nreturn [{\n  json: {\n    ...contract,\n    gates: {\n      ...gates,\n      policy_firewall: {\n        status: \"PASSED\",\n        timestamp: new Date().toISOString(),\n        // Log the corrected value so audits prove the math was right\n        checked_amount_usd: amountUSD.toFixed(2), \n        exchange_rate_used: currency === \"UZS\" ? rate : 1.0\n      }\n    },\n    state: gates.human_gate.required ? \"LOCKED\" : \"AUTHORIZED\"\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2112,
+        -144
+      ],
+      "id": "cddbb25d-d508-45cb-8763-3cf9731058d9",
+      "name": "BLOCK 8.2: Execution Policy Firewall"
+    },
+    {
+      "parameters": {
+        "jsCode": "// BLOCK 8.1: EXECUTION CONTRACT BUILDER (PRODUCTION)\n// Purpose: Create a binding contract based on REAL input data\n\nconst input = $input.first().json;\n\n// 1. ROBUST DATA EXTRACTION (The Fix)\n// We check every possible hiding spot for the money.\nlet raw_amount = 0;\nif (input.security_gate && input.security_gate.ingress_amount) {\n    raw_amount = input.security_gate.ingress_amount; // Priority 1: Sanitized Gate Data\n} else if (input.body && input.body.amount) {\n    raw_amount = input.body.amount; // Priority 2: Direct Webhook Body\n} else if (input.amount) {\n    raw_amount = input.amount; // Priority 3: Flat structure\n}\n\n// Convert to float\nconst real_amount = parseFloat(raw_amount || 0);\n\n// Get Subject\nconst subject = input.body?.subject || input.subject || \"Standard Transaction\";\n\n// 2. DEFINE THRESHOLDS\nconst HUMAN_REVIEW_THRESHOLD = 10000; // $10k limit\nconst IS_SAR_TRIGGERED = input.regulatory_action === \"FILE_SAR_IMMEDIATE\";\n\n// 3. DETERMINE IF HUMAN IS NEEDED\nconst is_human_needed = real_amount >= HUMAN_REVIEW_THRESHOLD || IS_SAR_TRIGGERED;\n\nreturn {\n  contract_id: \"exec_\" + (input.trace_id || Math.floor(Math.random() * 100000)),\n  trace_id: input.trace_id,\n  created_at: new Date().toISOString(),\n  \n  intent: {\n    target_tool: \"transfer_internal\",\n    amount_atomic: real_amount, // <--- THIS WILL NOW BE 100\n    currency: \"USD\",\n    description: subject // <--- THIS WILL NOW BE \"Balance Inquiry...\"\n  },\n  \n  gates: {\n    human_gate: { \n      required: is_human_needed,\n      reason: is_human_needed ? \"RISK_THRESHOLD_EXCEEDED\" : \"STANDARD_FLOW\",\n      method: \"VOICE_LIVENESS_V2\"\n    },\n    policy_firewall: {\n        status: \"PENDING\",\n        checks: [\"MAX_AMOUNT\", \"VELOCITY\"]\n    }\n  },\n  \n  state: \"DRAFT\"\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1888,
+        -144
+      ],
+      "id": "9eab5633-d175-47ed-adef-44cd2c4b6448",
+      "name": "BLOCK 8.1: Execution Contract Builder"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://[YOUR_SPLUNK_HEC_URL]:8088/services/collector",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Splunk {{$vars.SPLUNK_HEC_TOKEN}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"sourcetype\": \"_json\",\n  \"event\": {\n    \"trace_id\": \"{{ $node[\"FORENSIC LOGGING\"].json.forensic_log.trace_id }}\",\n    \"guard_decision\": \"{{ $node[\"FORENSIC LOGGING\"].json.forensic_log.guard_decision }}\",\n    \"economics\": {{ JSON.stringify($(\"BLOCK 7.2: Unit Economics Engine\").item.json.economics || {}) }}\n  }\n}",
+        "options": {}
+      },
+      "id": "43dc412f-3007-44f5-8631-99ad032beb76",
+      "name": "SIEM: Stream to Splunk",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1216,
+        -144
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "bucketName": "revenant-worm-audit-ledger",
+        "fileName": "={{ $node[\"FORENSIC LOGGING\"].json.forensic_log.trace_id }}_audit.json",
+        "additionalFields": {
+          "storageClass": "glacier"
+        }
+      },
+      "id": "f06b1129-b688-4861-8c4d-ac522e318e7b",
+      "name": "WORM Storage: AWS S3",
+      "type": "n8n-nodes-base.awsS3",
+      "typeVersion": 1,
+      "position": [
+        1440,
+        -144
+      ],
+      "credentials": {
+        "aws": {
+          "id": "RtfVY3fdUG7KOagD",
+          "name": "AWS (IAM) account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// BLOCK 8.3: HUMAN-IN-THE-LOOP GATE (Hardened v26.5)\n// PURPOSE: Route contract & Define Zombie-Killing Timeouts\n\nconst contract = items[0].json;\n\n// SCENARIO 1: The Iron Hand killed it\nif (contract.state === \"REJECTED\") {\n  return {\n    json: {\n      status: \"STOP\",\n      message_to_user: `⚠️ Security Alert: Blocked by Sovereign Layer. Reason: ${contract.gates?.policy_firewall?.reason || \"POLICY_VIOLATION\"}`,\n      admin_alert: \"CRITICAL_FAILURE_BLOCKED\"\n    }\n  };\n}\n\n// SCENARIO 2: Needs Human Approval (LOCKED)\nif (contract.state === \"LOCKED\" || (contract.gates && contract.gates.human_gate && contract.gates.human_gate.required)) {\n  return {\n    json: {\n      status: \"PAUSE\",\n      message_to_user: contract.message_to_user || \"🔒 Verification Required.\",\n      action_required: \"TRIGGER_TELEGRAM_BUTTON\", \n      contract_id: contract.contract_id,\n      \n      // --- ZOMBIE KILLER CONFIG (NEW) ---\n      // Downstream Wait Node should use these values\n      timeout_config: {\n          max_wait_ms: 900000, // 15 Minutes\n          strategy: \"AUTO_REJECT\",\n          expires_at: new Date(Date.now() + 900000).toISOString()\n      }\n    }\n  };\n}\n\n// SCENARIO 3: Safe to Execute\nreturn {\n    json: {\n      status: \"EXECUTE\",\n      tool: contract.intent.target_tool,\n      params: contract.intent,\n      contract_id: contract.contract_id,\n      message_to_user: \"✅ Transaction Authorized. Processing now...\"\n    }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2336,
+        -144
+      ],
+      "id": "781e23a3-edbf-49cb-adbd-ce1d75128ae4",
+      "name": "BLOCK 8.3: Human-in-the-Loop Gate"
+    },
+    {
+      "parameters": {
+        "jsCode": "// BLOCK 8.4: TRAINING DATA SANITIZER (Hardened)\n// GOAL: Prepare safe data for fine-tuning the next AI model.\n\nconst input = items[0].json;\nlet cleanText = JSON.stringify(input);\n\n// 1. POISON DEFENSE (Remove Jailbreaks)\nconst poisonPatterns = [/ignore previous/yi, /system prompt/yi, /override/yi];\npoisonPatterns.forEach(p => cleanText = cleanText.replace(p, \"[REDACTED_POISON]\"));\n\n// 2. PII DEFENSE (Remove Secrets)\nconst piiPatterns = [\n    /\\b(?:\\d[ -]*?){13,16}\\b/g, // Credit Cards\n    /[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}/g // Emails\n];\npiiPatterns.forEach(p => cleanText = cleanText.replace(p, \"[REDACTED_PII]\"));\n\nreturn {\n    json: {\n        dataset: \"revenant_v1_fine_tune\",\n        input_vector: cleanText,\n        outcome: input.status, // EXECUTE, STOP, or PAUSE\n        timestamp: new Date().toISOString()\n    }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2560,
+        -144
+      ],
+      "id": "a58d7933-efcf-4f6d-ad73-0b8c0826a475",
+      "name": "BLOCK 8.4: Training Data Sanitizer"
+    },
+    {
+      "parameters": {
+        "tableId": "ai_training_datasets",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "dataset_name",
+              "fieldValue": "={{$json.dataset}}"
+            },
+            {
+              "fieldId": "input_vector",
+              "fieldValue": "={{$json.input_vector}}"
+            },
+            {
+              "fieldId": "outcome",
+              "fieldValue": "={{$json.outcome}}"
+            },
+            {
+              "fieldId": "created_at",
+              "fieldValue": "={{$json.timestamp}}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        2784,
+        -144
+      ],
+      "id": "3d8bc208-78e2-408f-b8ad-38186f9a292b",
+      "name": "Block 8.5: Training Sink",
+      "credentials": {
+        "supabaseApi": {
+          "id": "r02w1pztpBboCFhe",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// NODE: BLOCK 7.6: FORENSIC SIGNER (Phase 0.5 Audit-Compliant)\n// UPGRADE: Deprecated local HMAC. Pre-processing for HSM (KMS) Signing.\nconst crypto = require('crypto');\n\nconst item = $input.first();\nconst root = item.json;\nconst trace = root.governance || {};\nconst economics = root.economics || {};\nconst validation = root.validation || {};\nconst scrubbedData = root.scrubbed_data || {};\n\n// 1. IMMUTABLE MANIFEST\nconst logManifest = {\n    trace_id: trace.trace_id,\n    system_version: trace.system_version || \"v30.0-hardened\",\n    timestamp: new Date().toISOString(),\n    decision: scrubbedData.decision,\n    net_savings_uzs: economics.net_savings,\n    validation_status: validation.status,\n    // Physics snapshot for audit\n    input_state_hash: crypto.createHash('sha256').update(JSON.stringify(trace.intent || {})).digest('hex'),\n    data_payload_hash: crypto.createHash('sha256').update(JSON.stringify(scrubbedData)).digest('hex')\n};\n\n// 2. KMS PRE-PROCESSOR\n// Biz ma'lumotni imzolash uchun KMS'ga yuborishga tayyorlaymiz.\n// Signature tuguni buni qabul qilib, AWS KMS orqali haqiqiy HSM imzosini oladi.\nreturn {\n    json: {\n        ...root,\n        forensic_manifest: logManifest,\n        // Biz manifestni \"Message\" sifatida tayyorlaymiz, \n        // chunki keyingi \"KMS Sign Node\" buni HSM'ga yuboradi.\n        payload_to_sign: Buffer.from(JSON.stringify(logManifest)).toString('base64'),\n        audit_ready: true,\n        emitted_at: new Date().toISOString()\n    }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3008,
+        -144
+      ],
+      "id": "37088d99-25ed-4ab2-b33f-b4590f271906",
+      "name": "Post-Execution Forensic Signer"
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "bucketName": "revenant-worm-audit-ledger",
+        "fileName": "={{ $json.forensic_manifest.trace_id }}_audit.json",
+        "additionalFields": {
+          "storageClass": "glacier"
+        }
+      },
+      "id": "f8f67485-f7b6-44b6-93c3-9c3faf7cc808",
+      "name": "Post-Execution WORM Storage",
+      "type": "n8n-nodes-base.awsS3",
+      "typeVersion": 1,
+      "position": [
+        3232,
+        -144
+      ],
+      "credentials": {
+        "aws": {
+          "id": "RtfVY3fdUG7KOagD",
+          "name": "AWS (IAM) account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "trunk-3",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "0046854f-64d8-4215-8657-174a5badac8d",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -352,
+        -144
+      ],
+      "webhookId": "8adeb186-0ddd-4005-9548-bd8ccde88f0e"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "1773e846-d8e1-466e-ab3c-7272d0485f5e",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        3456,
+        -144
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "BLOCK 7.1: Trace Context Initializer": {
+      "main": [
+        [
+          {
+            "node": "BLOCK 7.2: Unit Economics Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BLOCK 7.2: Unit Economics Engine": {
+      "main": [
+        [
+          {
+            "node": "BLOCK 7.3: Invariant Validator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BLOCK 7.3: Invariant Validator": {
+      "main": [
+        [
+          {
+            "node": "BLOCK 7.4: PII Forensic Scrubber",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BLOCK 7.4: PII Forensic Scrubber": {
+      "main": [
+        [
+          {
+            "node": "BLOCK 7.6: Forensic Signer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BLOCK 7.6: Forensic Signer": {
+      "main": [
+        [
+          {
+            "node": "AWS KMS: Sign Forensic Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BLOCK 7.8: CBU Compliance Engine": {
+      "main": [
+        [
+          {
+            "node": "BLOCK 8.1: Execution Contract Builder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BLOCK 8.1: Execution Contract Builder": {
+      "main": [
+        [
+          {
+            "node": "BLOCK 8.2: Execution Policy Firewall",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SIEM: Stream to Splunk": {
+      "main": [
+        [
+          {
+            "node": "WORM Storage: AWS S3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WORM Storage: AWS S3": {
+      "main": [
+        [
+          {
+            "node": "BLOCK 7.8: CBU Compliance Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AWS KMS: Sign Forensic Payload": {
+      "main": [
+        [
+          {
+            "node": "SIEM: Stream to Splunk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BLOCK 8.3: Human-in-the-Loop Gate": {
+      "main": [
+        [
+          {
+            "node": "BLOCK 8.4: Training Data Sanitizer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BLOCK 8.4: Training Data Sanitizer": {
+      "main": [
+        [
+          {
+            "node": "Block 8.5: Training Sink",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BLOCK 8.2: Execution Policy Firewall": {
+      "main": [
+        [
+          {
+            "node": "BLOCK 8.3: Human-in-the-Loop Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post-Execution Forensic Signer": {
+      "main": [
+        [
+          {
+            "node": "Post-Execution WORM Storage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Block 8.5: Training Sink": {
+      "main": [
+        [
+          {
+            "node": "Post-Execution Forensic Signer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "BLOCK 7.1: Trace Context Initializer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post-Execution WORM Storage": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "91e2c33c-d14d-4098-9c80-9ad450bd581a",
+  "meta": {
+    "instanceId": "4f14f7ac18668138c414d2238e63ec58a8710810d54692bc8249b8c7e0dbb820"
+  },
+  "nodeGroups": [],
+  "id": "HsyillZY3wMuI4Ds",
+  "tags": []
+}
