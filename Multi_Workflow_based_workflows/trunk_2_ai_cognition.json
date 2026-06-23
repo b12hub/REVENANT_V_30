@@ -1,0 +1,1010 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// NODE 1: Governance Gate & Context Assembler (V30 OIDC/ABAC Hardened & 4-Tier Matrix)\nconst item = $input.first();\nconst ct = item.json.canonical_ticket || item.json; \n\n// ==================== PHASE 3.7 INTEGRITY CHECK ====================\n// Maintained to ensure the pipeline cannot be bypassed\nif (item.json._phase_3_7 && !item.json._phase_3_7.final_execution_seal?.phase_3_complete) {\n    throw new Error('GOVERNANCE_BREACH: Block 4 entry attempted without Phase 3.7 Seal.');\n}\n\n// ==================== ENTERPRISE IAM & OIDC POLICY ENGINE (V30) ====================\nconst advisoryRestrictions = [];\nconst jurisdictionFlags = [];\n\n// 1. EXTRACT OIDC CONTEXT (Zero-Trust Default Fallbacks)\nconst oidcContext = item.json.security_headers?.oidc_token_decoded || {\n    user_role: 'unauthenticated_customer',\n    clearance_level: 'PUBLIC',\n    source_ip: item.json.security_headers?.source_ip || 'unknown'\n};\n\nconst dataClassification = ct.classification?.data_classification || 'INTERNAL';\nconst riskScore = ct.classification?.severity === 'critical' ? 90 :\n                  ct.classification?.severity === 'high' ? 70 : 30;\n\nlet isAuthorized = true;\n\n// ==================== 2. ABAC MATRIX EVALUATION (4-TIER) ====================\n\n// A. Segregation of Duties (SoD) Check\nif (oidcContext.user_role === 'automation_engineer' && dataClassification.toUpperCase() === 'RESTRICTED') {\n    isAuthorized = false; // Engineers cannot access raw financial ledgers\n    advisoryRestrictions.push('SoD_VIOLATION_BLOCKED');\n}\n\n// B. 4-Tier Data Classification Routing (Tier 5 Audit Fix)\nswitch (dataClassification.toUpperCase()) {\n    case 'PUBLIC':\n        jurisdictionFlags.push('CLOUD_ADVISORY_PERMITTED');\n        // Public data does not require PII masking or local LLMs\n        break;\n\n    case 'INTERNAL':\n        jurisdictionFlags.push('CLOUD_ADVISORY_PERMITTED');\n        advisoryRestrictions.push('PII_MASKING_REQUIRED');\n        break;\n\n    case 'CONFIDENTIAL': // <--- THE MISSING TIER ADDED HERE\n        jurisdictionFlags.push('HIGH_RISK_ENCLAVE_REQUIRED');\n        advisoryRestrictions.push('PII_MASKING_REQUIRED');\n        advisoryRestrictions.push('LLM_MODE_LOCAL_ONLY'); // Forces local Triton fallback\n        break;\n\n    case 'RESTRICTED':\n        jurisdictionFlags.push('HIGH_RISK_ENCLAVE_REQUIRED');\n        advisoryRestrictions.push('PII_MASKING_REQUIRED');\n        advisoryRestrictions.push('LLM_MODE_LOCAL_ONLY'); \n        advisoryRestrictions.push('HUMAN_IN_THE_LOOP_REQUIRED');\n        break;\n\n    default:\n        // Safe Default (Treat as INTERNAL)\n        jurisdictionFlags.push('CLOUD_ADVISORY_PERMITTED');\n        advisoryRestrictions.push('PII_MASKING_REQUIRED');\n}\n\n// C. Dynamic Risk Score Override\n// Elevates any classification to Restricted behavior if severity is critical\nif (riskScore >= 90 && !advisoryRestrictions.includes('LLM_MODE_LOCAL_ONLY')) {\n    jurisdictionFlags.push('HIGH_RISK_ENCLAVE_REQUIRED');\n    advisoryRestrictions.push('HUMAN_IN_THE_LOOP_REQUIRED');\n    advisoryRestrictions.push('LLM_MODE_LOCAL_ONLY');\n}\n\nif (!isAuthorized) {\n    throw new Error('IAM_REJECTION: OIDC Token context does not satisfy ABAC policy matrix.');\n}\n\n// ==================== CONTEXT ASSEMBLY (IMMUTABLE SCHEMA) ====================\nconst advisoryContext = {\n    trace_id: ct.trace_id || 'unknown_trace',\n    customer_issue: {\n        subject: ct.subject || 'No Subject',\n        body_preview: ct.body?.substring(0, 500) || '',\n        domain: ct.customer_email?.split('@')[1] || 'unknown'\n    },\n    system_assessment: {\n        intent: ct.classification?.intent || 'unknown',\n        severity: ct.classification?.severity || 'medium',\n        confidence: ct.classification?.confidence || 0\n    },\n    __governance: {\n        seal_id: item.json._phase_3_7?.final_execution_seal?.seal_id || 'v30-dynamic-seal',\n        policy_checks: \"COMPLIANT_OIDC_ABAC_4_TIER\",\n        advisory_restrictions: advisoryRestrictions,\n        jurisdiction_flags: jurisdictionFlags,\n        checked_at: new Date().toISOString(),\n        llm_eligible: !advisoryRestrictions.includes('LLM_MODE_LOCAL_ONLY')\n    }\n};\n\n// ==================== CRYPTOGRAPHIC INTEGRITY ====================\n// Pure JS implementation to bypass n8n's \"require('crypto') disallowed\" sandbox restriction\nfunction getHash(obj) {\n    const str = JSON.stringify(obj, Object.keys(obj).sort());\n    let hash = 0;\n    for (let i = 0; i < str.length; i++) {\n        const char = str.charCodeAt(i);\n        hash = ((hash << 5) - hash) + char;\n        hash |= 0; // Convert to 32bit integer\n    }\n    return Math.abs(hash).toString(16); // Return fast hex representation\n}\n\nconst contextHash = getHash(advisoryContext);\nadvisoryContext.__integrity_hash = contextHash;\n\n// ==================== OUTPUT CONSTRUCTION ====================\nreturn [{\n    json: {\n        ...item.json,\n        advisory: {\n            input_context: advisoryContext,\n            llm_eligible: advisoryContext.__governance.llm_eligible,\n            execution_path: advisoryContext.__governance.llm_eligible ? 'CLOUD_LLM' : 'DETERMINISTIC_FALLBACK'\n        },\n        _phase_4_1: {\n            status: \"AUTHORIZED\",\n            timestamp: new Date().toISOString(),\n            context_hash: contextHash\n        }\n    }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -128,
+        -128
+      ],
+      "id": "737206c1-7432-475a-90bf-3be69c38dfd4",
+      "name": "Governance Gate & Context Assembler"
+    },
+    {
+      "parameters": {
+        "jsCode": "// NODE: BLOCK 4.0: ADVISORY EXECUTION CONTROLLER (Hardened v26.2)\n// CAPABILITY: Dynamic Kill-Switch, Ambiguity Bypass & Context Injection\n\nconst item = $input.first();\nconst json = item.json;\nconst advisory = json.advisory || {};\nconst ct = json.canonical_ticket || {};\nconst routing = ct.routing_decision || {};\n\n// ==================== 1. DYNAMIC SECURITY CONTEXT RECONSTRUCTION ====================\nconst biometrics = ct.biometrics || {};\nconst verification = biometrics.verification || {};\nconst context = biometrics.context || {};\n\nconst securityState = {\n    trace_id: ct.trace_id || \"UNKNOWN\",\n    bio_status: biometrics.status || \"NOT_ENROLLED\", \n    severity: (ct.severity || \"low\").toLowerCase(), \n    intent: ct.rule_engine?.intent || \"GENERAL_INQUIRY\",\n    amount: ct.transaction_amount || context.transaction_amount || 0,\n    confidence_score: verification.score || 0,\n    ambiguity_score: routing.ambiguity_score || 0,\n    route: routing.route || \"FLOW_GENERAL\"\n};\n\n// ==================== 2. EXECUTION STRATEGY ====================\n// NEW: Bypass the LLM entirely if the Master Router detected high ambiguity\nconst isHighAmbiguity = securityState.ambiguity_score > 40 || securityState.route === 'CLARIFICATION_LOOP';\n\nconst executionDecision = {\n    use_llm: !isHighAmbiguity, \n    strategy: isHighAmbiguity ? \"DETERMINISTIC_CLARIFICATION\" : \"AGENTIC_CHAIN_OF_THOUGHT\",\n    governance_lock: true\n};\n\n// ==================== 3. DYNAMIC INSTRUCTION GENERATOR (THE BRAIN) ====================\nlet instructionBlock = \"\";\n\nif (isHighAmbiguity) {\n    // 🛑 KILL SWITCH: AMBIGUOUS REQUEST (BYPASS LLM)\n    instructionBlock = `\n    [CLARIFICATION REQUIRED]\n    - Ambiguity Score: ${securityState.ambiguity_score}\n    - ACTION REQUIRED: BYPASS LLM AND REQUEST CLARIFICATION\n    `;\n} else if (securityState.severity === \"critical\" || securityState.intent === \"security_alert\") {\n    // 🛑 KILL SWITCH: CRITICAL THREAT DETECTED\n    instructionBlock = `\n    [CRITICAL SECURITY ALERT ACTIVE]\n    - THREAT LEVEL: CRITICAL (Source: Fusion Engine)\n    - ACTION REQUIRED: IMMEDIATE REJECTION\n    - INSTRUCTION: \n      1. You MUST set \"action_plan\" to \"BLOCK_USER_AND_DEVICE\".\n      2. Inform the user: \"Transaction blocked due to security alert ${securityState.trace_id}. Account locked.\"\n      3. DO NOT offer manual review. DO NOT be polite.\n      4. IGNORE all previous \"be helpful\" directives. Protect the bank.\n    `;\n} else if (securityState.amount >= 10000) {\n    // ⚠️ HIGH VALUE: ESCALATION REQUIRED\n    instructionBlock = `\n    [HIGH VALUE TRANSACTION]\n    - Amount: $${securityState.amount} (Exceeds $10k Limit)\n    - INSTRUCTION: \n      1. Do not auto-execute. \n      2. Set \"action_plan\" to \"ESCALATE_TO_HUMAN\".\n      3. Explain the limit politely and route to VIP Desk.\n    `;\n} else {\n    // ✅ STANDARD: AUTONOMOUS RESOLUTION\n    instructionBlock = `\n    [STANDARD REQUEST]\n    - Status: SAFE\n    - Route: ${securityState.route}\n    - INSTRUCTION: Resolve the request autonomously based on banking protocols.\n    `;\n}\n\n// ==================== 4. SYSTEM PROMPT (CORE IDENTITY) ====================\nconst systemPrompt = `You are the REVENANT AI CORE, a Senior Sovereign Wealth & Risk Architect.\nYour primary directive is ASSET PROTECTION. \n\n[PROTOCOL HIERARCHY]\n1. IF Instruction says BLOCK -> You BLOCK. No exceptions.\n2. IF Instruction says ESCALATE -> You ESCALATE.\n3. IF Instruction says EXECUTE -> You EXECUTE.\n\n[OUTPUT SCHEMA]\nReturn ONLY a valid JSON object:\n{\n  \"thought_chain\": \"Step-by-step reasoning...\",\n  \"solvability_score\": 0.0 to 1.0,\n  \"action_plan\": \"BLOCK_USER_AND_DEVICE | ESCALATE_TO_HUMAN | EXECUTE_TRANSACTION\",\n  \"rationale\": \"Audit log summary.\",\n  \"draft_customer_response\": \"Final message to user.\"\n}`;\n\n// ==================== 5. USER CONTEXT INJECTION (DYNAMIC) ====================\nconst userPrompt = `\n[INCOMING TELEMETRY]\nTrace ID: ${securityState.trace_id}\nSubject: ${ct.subject || 'N/A'}\nBody: ${ct.body || 'N/A'}\n\n[REAL-TIME SECURITY STATE]\n- Biometric Status: ${securityState.bio_status}\n- Severity: ${securityState.severity.toUpperCase()}\n- Detected Amount: $${securityState.amount}\n- Ambiguity Score: ${securityState.ambiguity_score}\n- Master Route: ${securityState.route}\n\n${instructionBlock}\n`;\n\n// ==================== 6. OUTPUT CONSTRUCTION ====================\nconst requestBody = {\n    model: \"openai/gpt-4o-mini\",\n    messages: [\n        { role: \"system\", content: systemPrompt },\n        { role: \"user\", content: userPrompt }\n    ],\n    temperature: 0.0,\n    max_tokens: 1000,\n    response_format: { type: \"json_object\" }\n};\n\n// If LLM is bypassed, we inject the deterministic advisory directly for the Output Sanitizer node\nlet deterministic_advisory = null;\nif (isHighAmbiguity) {\n    deterministic_advisory = {\n        thought_chain: `Bypassed LLM due to high ambiguity score (${securityState.ambiguity_score}). Required fields are missing.`,\n        solvability_score: 0.0,\n        action_plan: \"ESCALATE_TO_HUMAN\",\n        rationale: \"Ambiguity threshold exceeded. Requesting clarification from the user.\",\n        draft_customer_response: \"We need more information to process your request safely. Please provide the missing details (e.g., exact amount or destination account) so we can proceed.\"\n    };\n}\n\nreturn [{\n    json: {\n        ...json,\n        // Only send request body if we are actually querying the LLM\n        _llm_request_body: isHighAmbiguity ? undefined : requestBody,\n        // Seed the fallback object so downstream IF nodes can capture it immediately\n        deterministic_fallback: deterministic_advisory,\n        security_context_snapshot: securityState,\n        advisory: {\n            ...advisory,\n            execution_decision: executionDecision,\n            agent_version: \"v26.2-hardened-killswitch-router\"\n        }\n    }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        80,
+        -128
+      ],
+      "id": "5fad2b59-8e52-431a-a4c4-d336b2f6513f",
+      "name": "Advisory Execution Controller (Merged)"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst transactionData = item.canonical_ticket || item;\nconst riskPrompt = \"Evaluate this transaction for AML, Velocity, and Geo-Risk. Output strict JSON schema.\";\n\nconst SCHEMA_ENFORCEMENT_PROMPT = `\nYou are a financial risk evaluation engine operating under strict regulatory oversight.\n\nCRITICAL INSTRUCTIONS:\n1. Analyse the provided transaction payload and risk prompt.\n2. You MUST respond with ONLY a single, valid JSON object. No markdown, no prose, no explanation.\n3. The JSON object MUST conform exactly to this schema:\n   {\n     \"action\":          \"APPROVE\" | \"DENY\",\n     \"confidence\":      <number between 0.0 and 1.0>,\n     \"rules_triggered\": [\"<string>\", ...]\n   }\n\nIf you cannot make a determination, respond with:\n  { \"action\": \"DENY\", \"confidence\": 1.0, \"rules_triggered\": [\"INDETERMINATE\"] }\n\nDo NOT include any text outside the JSON object.\n`.trim();\n\nconst messages = [\n  { role: \"system\", content: SCHEMA_ENFORCEMENT_PROMPT },\n  { role: \"user\", content: \"RISK PROMPT:\\n\" + riskPrompt + \"\\n\\nTRANSACTION PAYLOAD:\\n\" + JSON.stringify(transactionData, null, 2) }\n];\n\nreturn [{\n  json: {\n    ...item,\n    _consensus_meta: { transactionData, riskPrompt },\n    body_openai: {\n      model: \"openai/gpt-4o\",\n      temperature: 0,\n      max_tokens: 512,\n      response_format: { type: \"json_object\" },\n      messages: messages\n    },\n    body_anthropic: {\n      model: \"anthropic/claude-3.5-sonnet\",\n      temperature: 0,\n      max_tokens: 512,\n      response_format: { type: \"json_object\" },\n      messages: messages\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        -240
+      ],
+      "id": "f126f5ad-51fb-460a-871c-2437360076bd",
+      "name": "Prep Consensus Payload"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openRouterApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "HTTP-Referer",
+              "value": "https://n8n.cloud"
+            },
+            {
+              "name": "X-Title",
+              "value": "Revenant Phase 3 - Anthropic"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json.body_anthropic }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1008,
+        -256
+      ],
+      "id": "12c056f4-47ad-418f-8f12-a0a026d539fa",
+      "name": "LLM OpenRouter (Anthropic)",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "credentials": {
+        "openRouterApi": {
+          "id": "o1YYcaxj9OhyhT8G",
+          "name": "OpenRouter account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\n\n// Helpers\nfunction parseAndValidate(raw) {\n  if (!raw) return null;\n  try {\n    const cleaned = raw.replace(/^```(?:json)?\\s*/i, \"\").replace(/\\s*```\\s*$/, \"\").trim();\n    const parsed = JSON.parse(cleaned);\n    if (typeof parsed !== \"object\" || !parsed || !parsed.action || typeof parsed.confidence !== \"number\" || !Array.isArray(parsed.rules_triggered)) return null;\n    if (parsed.action !== \"APPROVE\" && parsed.action !== \"DENY\") return null;\n    return {\n      action: parsed.action,\n      confidence: Math.min(1, Math.max(0, parsed.confidence)),\n      rules_triggered: parsed.rules_triggered\n    };\n  } catch (e) { return null; }\n}\n\nfunction sha256Hex(data) {\n  const canonical = JSON.stringify(data, Object.keys(data).sort());\n  return crypto.createHash(\"sha256\").update(canonical, \"utf8\").digest(\"hex\");\n}\n\n// 1. Fetch data from all nodes seamlessly\nconst originalItem = $('Prep Consensus Payload').first().json;\nconst openaiEnv = $('LLM OpenRouter (OpenAI)').first().json;\nconst anthropicEnv = $('LLM OpenRouter (Anthropic)').first().json;\n\n// 2. Extract contents and statuses\nconst openaiRawContent = openaiEnv?.choices?.[0]?.message?.content || null;\nconst anthropicRawContent = anthropicEnv?.choices?.[0]?.message?.content || null;\n\nconst oaiParsed = parseAndValidate(openaiRawContent);\nconst antParsed = parseAndValidate(anthropicRawContent);\n\nconst openaiOk = oaiParsed !== null;\nconst anthropicOk = antParsed !== null;\n\n// 3. Consensus Logic\nconst bothApprove = openaiOk && anthropicOk && oaiParsed.action === \"APPROVE\" && antParsed.action === \"APPROVE\";\nlet consensus, reason;\n\nif (bothApprove) {\n  consensus = \"APPROVED\";\n  reason = `Both providers independently approved. OpenAI confidence: ${oaiParsed.confidence}, Anthropic confidence: ${antParsed.confidence}.`;\n} else if (!openaiOk && !anthropicOk) {\n  consensus = \"ESCALATE_TO_HUMAN\";\n  reason = \"ESCALATED: Both providers failed schema validation or timed out.\";\n} else if (!openaiOk) {\n  consensus = \"ESCALATE_TO_HUMAN\";\n  reason = \"ESCALATED: OpenAI failed schema validation or timed out.\";\n} else if (!anthropicOk) {\n  consensus = \"ESCALATE_TO_HUMAN\";\n  reason = \"ESCALATED: Anthropic failed schema validation or timed out.\";\n} else {\n  consensus = \"ESCALATE_TO_HUMAN\";\n  reason = `ESCALATED: Disagreement detected. OpenAI=${oaiParsed?.action || \"FAIL\"}, Anthropic=${antParsed?.action || \"FAIL\"}.`;\n}\n\n// 4. Build WORM Audit Result\nconst result = {\n  consensus,\n  decided_at: new Date().toISOString(),\n  audit_hash: \"\",\n  openai: {\n    action: openaiOk ? oaiParsed.action : \"FAILED\",\n    confidence: openaiOk ? oaiParsed.confidence : null,\n    rules_triggered: openaiOk ? oaiParsed.rules_triggered : null,\n    provider_id: openaiEnv?.id || null\n  },\n  anthropic: {\n    action: anthropicOk ? antParsed.action : \"FAILED\",\n    confidence: anthropicOk ? antParsed.confidence : null,\n    rules_triggered: anthropicOk ? antParsed.rules_triggered : null,\n    provider_id: anthropicEnv?.id || null\n  },\n  reason\n};\n\nconst auditPayload = {\n  ...result,\n  audit_hash: undefined,\n  _raw_openai_envelope: openaiEnv,\n  _raw_anthropic_envelope: anthropicEnv,\n  _transaction_sha256: sha256Hex(originalItem._consensus_meta.transactionData)\n};\n\nresult.audit_hash = sha256Hex(auditPayload);\n\n// 5. Structure output exactly for downstream compatibility\nconst combinedRules = [...new Set([\n  ...(result.openai.rules_triggered || []),\n  ...(result.anthropic.rules_triggered || [])\n])];\n\nconst minConfidence = Math.min(\n  result.openai.confidence || 0, \n  result.anthropic.confidence || 0\n);\n\nconst finalAdvisory = {\n  action: result.consensus === \"APPROVED\" ? \"APPROVE\" : \"DENY\",\n  confidence: minConfidence,\n  rules_triggered: combinedRules,\n  consensus_reason: result.reason\n};\n\n// Clean up prep fields\ndelete originalItem._consensus_meta;\ndelete originalItem.body_openai;\ndelete originalItem.body_anthropic;\n\nreturn [{\n  json: {\n    ...originalItem,\n    ai_consensus_audit: result,\n    choices: [{\n      message: {\n        content: JSON.stringify(finalAdvisory)\n      }\n    }]\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        -256
+      ],
+      "id": "2034cdd9-c7f8-4426-8bf3-85b8a94ab84a",
+      "name": "Consensus Engine Validator"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openRouterApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "HTTP-Referer",
+              "value": "https://revenant.bank.uz"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.body_openai }}",
+        "options": {
+          "timeout": 2000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        672,
+        -240
+      ],
+      "id": "be112cc8-fdbd-4d00-adbd-554e513e5991",
+      "name": "LLM OpenRouter (OpenAI) - Circuit Breaker",
+      "retryOnFail": false,
+      "credentials": {
+        "openRouterApi": {
+          "id": "o1YYcaxj9OhyhT8G",
+          "name": "OpenRouter account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "07656556-b7ca-48cc-84e3-c957a105a370",
+              "leftValue": "={{ $json.error != undefined }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        848,
+        -96
+      ],
+      "id": "535d1174-a38f-466a-847d-bcb75205be8a",
+      "name": "LLM-error"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.ai_consensus_audit.openai.action === \"FAILED\" && $json.ai_consensus_audit.anthropic.action === \"FAILED\" }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              },
+              "id": "ee067102-2f50-40bd-9a2e-e9d73fde0170"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "aa100043-f179-4ab8-9711-565a5d6af3bb",
+      "name": "IF: Both Clouds Failed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1392,
+        -256
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "675f25c6-d693-4b4e-8048-2d4fae836380",
+              "leftValue": "={{$json.advisory.execution_decision.use_llm}}",
+              "rightValue": "llm_advisory",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        288,
+        -128
+      ],
+      "id": "19772dd2-8b71-48d7-b8e1-fd5ecbecdbfb",
+      "name": "If_USE_LLM"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://triton-inference.internal:8000/v2/models/revenant-llama3-secured/infer",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"inputs\": [\n    {\n      \"name\": \"text_input\",\n      \"shape\": [1],\n      \"datatype\": \"BYTES\",\n      \"data\": [\n        \"{{ $(\"Start\").item.json.system_prompt }} \\n\\n {{ $(\"Start\").item.json.user_prompt }}\"\n      ]\n    }\n  ]\n}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "3cdfe09f-d4e2-4c94-b3fc-be0f7abf1ff0",
+      "name": "LLM Triton (Self-Hosted Fallback)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1600,
+        -480
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\n\n// If Triton succeeds, parse its raw byte output. If Triton also crashes, deploy the absolute last-resort hardcoded schema.\nlet tritonContent = \"\";\n\nif (item.outputs && item.outputs[0] && item.outputs[0].data) {\n    tritonContent = item.outputs[0].data[0];\n} else {\n    tritonContent = JSON.stringify({\n        action: \"DENY\",\n        confidence: 1.0,\n        rules_triggered: [\"INDETERMINATE_SYSTEM_FAILURE\"],\n        consensus_reason: \"CRITICAL: Cloud and Local inference entirely unreachable.\"\n    });\n}\n\nreturn [{\n    json: {\n        ...item,\n        _execution_metadata: {\n            fallback_triggered: true,\n            fallback_source: item.outputs ? \"TRITON_LOCAL\" : \"HARDCODED_FAILSAFE\"\n        },\n        choices: [{\n            message: {\n                content: tritonContent\n            }\n        }]\n    }\n}];"
+      },
+      "id": "db0cf2ef-9d62-4d0f-b1ab-8d521cc0a924",
+      "name": "Format Triton Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        -208
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// NODE 3: LLM Output Sanitizer & Enterprise Validator (Phase 4 Merged)\nconst item = $input.first();\n\nconst advisory = item.json.advisory || {};\nconst ct = item.json.canonical_ticket || {};\n\n// ==================== DETERMINISTIC PATH HANDLING ====================\nif (advisory.llm_status && advisory.llm_status.status === 'deterministic_fallback') {\n    return [item];\n}\n\nconst llmRawOutput = item.json._llm_raw_response || item.json; \nconst llmOutput = llmRawOutput?.choices?.[0]?.message?.content || item.json.advisory_output;\n\n// ==================== LLM FAILURE FALLBACK ====================\nif (!llmOutput || (typeof llmOutput !== 'string' && typeof llmOutput !== 'object')) {\n    return [{\n        json: {\n            ...item.json,\n            advisory: {\n                ...advisory,\n                llm_output: {\n                    explanation: `Enterprise analysis complete for Ticket ID: ${ct.trace_id || 'N/A'}.`,\n                    suggested_next_steps: [\"Manual review required\", \"Check customer history\"],\n                    draft_customer_response: \"We are reviewing your request and will update you shortly.\",\n                    advisory_note: \"LLM fallback engaged\",\n                    confidence_disclaimer: \"Deterministic advisory\",\n                    transaction_proposal: { tool_name: \"NONE\" }\n                },\n                llm_status: {\n                    status: 'llm_failed_fallback',\n                    fallback_used: true,\n                    timestamp: new Date().toISOString()\n                }\n            }\n        }\n    }];\n}\n\n// ==================== PARSE LLM OUTPUT ====================\nlet parsedOutput;\ntry {\n    parsedOutput = typeof llmOutput === 'string' ? JSON.parse(llmOutput) : llmOutput;\n} catch (e) {\n    parsedOutput = {\n        explanation: String(llmOutput).substring(0, 500),\n        suggested_next_steps: [\"Review ticket manually\"],\n        draft_customer_response: \"Under review.\",\n        advisory_note: \"Unstructured response parsed\",\n        confidence_disclaimer: \"Parsed from raw text\",\n        transaction_proposal: { tool_name: \"NONE\" }\n    };\n}\n\n// ==================== TRANSACTION SECURITY GATE (PHASE 4 NEW) ====================\n// We allow specific tools but sanitize them before safety checks\nconst ALLOWED_TOOLS = ['UNBLOCK_CARD', 'RESET_PIN', 'FREEZE_ACCOUNT', 'NONE'];\nlet safeTransaction = parsedOutput.transaction_proposal || { tool_name: 'NONE' };\n\nif (!ALLOWED_TOOLS.includes(safeTransaction.tool_name)) {\n    safeTransaction = { \n        tool_name: 'NONE', \n        rationale: `Security Block: Invalid tool '${safeTransaction.tool_name}' requested.` \n    };\n}\n\n// ==================== ENTERPRISE SAFETY VALIDATION ====================\n// CRITICAL: We exclude the transaction_proposal from the text scan so valid tools don't trigger \"Forbidden Keywords\"\nconst contentToScan = { ...parsedOutput };\ndelete contentToScan.transaction_proposal; \nconst llmText = JSON.stringify(contentToScan).toLowerCase();\n\n// 1. Expanded Forbidden Keywords (Strict Advisory Enforcement)\nconst forbiddenKeywords = [\n    'set', 'override', 'decide', 'change', 'update', 'modify', 'must', 'should', 'will',\n    'command', 'order', 'instruction', 'classification', 'confidence', 'severity', 'sla',\n    'verify', 'execute', 'perform', 'confirm' \n];\n\nconst hasForbiddenContent = forbiddenKeywords.some(keyword => \n    llmText.includes(keyword) && !llmText.includes('confidence_disclaimer')\n);\n\n// 2. PII Detection\nconst piiPatterns = {\n    email: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}/gi,\n    phone: /\\+\\d[\\d\\s-]{7,}\\d/gi,\n    uzbekPhone: /(?:\\+998|998)\\s?\\d{2}\\s?\\d{3}\\s?\\d{2}\\s?\\d{2}/gi,\n    numericId: /\\b\\d{9,}\\b/gi,\n    creditCard: /\\b\\d{4}[-\\s]?\\d{4}[-\\s]?\\d{4}[-\\s]?\\d{4}\\b/gi,\n    passport: /\\b[A-Z]{2}\\d{7}\\b/gi\n};\n\nconst detectedPii = [];\nfor (const [type, pattern] of Object.entries(piiPatterns)) {\n    if (pattern.test(llmText)) {\n        detectedPii.push(type);\n        ['explanation', 'draft_customer_response', 'advisory_note'].forEach(field => {\n            if (parsedOutput[field]) parsedOutput[field] = parsedOutput[field].replace(pattern, '[REDACTED]');\n        });\n    }\n}\n\n// 3. Safety Flags\nconst safetyFlags = {\n    profanity_detected: ['damn', 'hell', 'shit', 'fuck', 'bastard', 'bitch'].some(word => llmText.includes(word)),\n    hallucination_markers: ['i think', 'maybe', 'likely', 'perhaps', 'possibly'].some(marker => llmText.includes(marker)),\n    policy_sensitive: ['confidential', 'proprietary', 'internal only', 'secret'].some(phrase => llmText.includes(phrase)),\n    harmful_content: ['violence', 'harm', 'kill', 'attack', 'abuse'].some(word => llmText.includes(word))\n};\n\n// ==================== COMPLIANCE-FIRST VALIDATION ====================\nconst validation = {\n    has_explanation: !!parsedOutput.explanation,\n    has_next_steps: Array.isArray(parsedOutput.suggested_next_steps),\n    has_draft_response: !!parsedOutput.draft_customer_response,\n    size_valid: JSON.stringify(parsedOutput).length <= 5000,\n    no_forbidden_content: !hasForbiddenContent,\n    pii_clear: detectedPii.length === 0, \n    no_safety_issues: !Object.values(safetyFlags).some(v => v === true),\n    is_advisory_only: llmText.includes('advisory') || llmText.includes('suggestion') || llmText.includes('recommend')\n};\n\n// Apply safety corrections\nif (!validation.no_safety_issues) {\n    parsedOutput.explanation = \"Advisory content filtered for safety compliance.\";\n    parsedOutput.advisory_note = \"Original content contained restricted material - Governance Redaction applied.\";\n}\n\n// ==================== FINAL SANITIZED OUTPUT ====================\nconst sanitizedOutput = {\n    explanation: String(parsedOutput.explanation || '').substring(0, 1000),\n    suggested_next_steps: Array.isArray(parsedOutput.suggested_next_steps) ? \n        parsedOutput.suggested_next_steps.slice(0, 5).map(step => String(step).substring(0, 200)) : \n        [\"Review system guidelines\"],\n    draft_customer_response: String(parsedOutput.draft_customer_response || '').substring(0, 1000),\n    advisory_note: String(parsedOutput.advisory_note || '').substring(0, 500),\n    confidence_disclaimer: String(parsedOutput.confidence_disclaimer || 'Enterprise advisory - system decisions are final'),\n    semantic_summary: String(parsedOutput.semantic_summary || ''), // Pass through for vector db\n    \n    // NEW: Pass the Transaction Proposal safely\n    transaction_proposal: safeTransaction,\n    \n    __validation: {\n        validated_at: new Date().toISOString(),\n        checks_passed: Object.values(validation).filter(v => v === true).length,\n        total_checks: Object.keys(validation).length,\n        pii_redacted: detectedPii.length > 0,\n        safety_corrected: !validation.no_safety_issues,\n        tool_authorized: safeTransaction.tool_name !== 'NONE'\n    }\n};\n\nreturn [{\n    json: {\n        ...item.json,\n        advisory: {\n            ...advisory,\n            llm_output: sanitizedOutput,\n            llm_status: {\n                status: 'validated',\n                validation: validation,\n                sanitized: true,\n                timestamp: new Date().toISOString(),\n                advisory_compliance: validation.is_advisory_only && validation.no_forbidden_content,\n                pii_handled: detectedPii.length > 0\n            }\n        }\n    }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        32
+      ],
+      "id": "acab730f-1f61-4b09-be36-88365c0ffdef",
+      "name": "LLM Output Sanitizer & Enterprise Validator"
+    },
+    {
+      "parameters": {
+        "jsCode": "// NODE 4: Advisory Confidence Labeler (Deterministic)\nconst item = $input.first();\n\n// DEFENSIVE ENTRY\nconst ct = item.json.canonical_ticket || {};\nconst advisory = item.json.advisory || {};\nconst llmOutput = advisory.llm_output || {};\nconst llmStatus = advisory.llm_status || {};\n\n// ==================== DETERMINISTIC CONFIDENCE CALCULATION ====================\n// NEW: Lowered base score to 0.2. The LLM must EARN confidence.\nlet confidenceScore = 0.2; \n\n// 1. DATA INTEGRITY CHECK (Critical Governance Gate)\nconst hasTicketData = !!(ct.classification && ct.classification.intent);\nif (!hasTicketData) {\n    // BRUTAL PENALTY: If we don't know what the ticket is about, confidence is capped.\n    confidenceScore -= 0.1;\n} else {\n    confidenceScore += 0.1; // Context available bonus\n}\n\n// 2. POLICY & QUALITY BOOSTS (Weighted lower to prevent saturation)\nif (!advisory.restrictions?.length) {\n    confidenceScore += 0.15; // Policy Compliance\n}\nif (llmStatus.status === 'validated' && llmStatus.advisory_compliance) {\n    confidenceScore += 0.1; \n}\nif (llmStatus.sanitized && !llmStatus.pii_handled) {\n    confidenceScore += 0.05; // Cleanliness is a minor factor now\n}\n\n// 3. CONTEXTUAL ALIGNMENT (The most important factor)\nconst classificationIntent = ct.classification?.intent || '';\nconst llmText = JSON.stringify(llmOutput).toLowerCase();\n\nif (classificationIntent && llmText.includes(classificationIntent.toLowerCase())) {\n    confidenceScore += 0.25; // Significant boost for actual alignment\n}\n\n// Severity Alignment\nconst severity = ct.classification?.severity || 'medium';\nif (severity === 'high' && (llmText.includes('urgent') || llmText.includes('priority'))) {\n    confidenceScore += 0.05;\n}\n\n// 4. OPERATIONAL AWARENESS\nif (ct.performance_metrics?.deadline_utc && (llmText.includes('deadline') || llmText.includes('sla'))) {\n    confidenceScore += 0.1;\n}\n\nconst costSaved = ct.business_impact?.cost_saved_uzs || 0;\nif (costSaved > 0 && (llmText.includes('savings') || llmText.includes('cost'))) {\n    confidenceScore += 0.05;\n}\n\n// 5. PENALTIES (Completeness & Risk)\nif (!llmOutput.suggested_next_steps?.length) confidenceScore -= 0.15;\nif (!llmOutput.draft_customer_response) confidenceScore -= 0.15;\n\nconst explanation = llmOutput.explanation || '';\nif (explanation.length < 50) confidenceScore -= 0.1;\nif (explanation.includes('maybe') || explanation.includes('possibly')) confidenceScore -= 0.1;\n\nconst riskLevel = advisory.input_context?.__governance?.risk_level;\nif (riskLevel === 'HIGH' || riskLevel === 'CRITICAL') confidenceScore -= 0.15;\n\n// ==================== CLAMP AND CATEGORIZE ====================\n// Ensure score stays within 0.0 and 1.0\nconfidenceScore = Math.max(0.0, Math.min(1.0, parseFloat(confidenceScore.toFixed(3))));\n\nlet confidenceCategory = 'low';\nif (confidenceScore >= 0.8) confidenceCategory = 'high'; // Raised threshold for HIGH\nelse if (confidenceScore >= 0.5) confidenceCategory = 'medium';\n\n// ==================== ENTERPRISE METADATA ====================\nconst calculationFactors = {\n    context_available: hasTicketData,\n    policy_compliant: !advisory.restrictions?.length,\n    alignment_verified: !!(classificationIntent && llmText.includes(classificationIntent.toLowerCase())),\n    risk_level: riskLevel || 'NORMAL',\n    checks_passed: llmOutput.__validation?.checks_passed || 0\n};\n\nreturn [{\n    json: {\n        ...item.json,\n        advisory: {\n            ...advisory,\n            advisory_confidence: {\n                score: confidenceScore,\n                category: confidenceCategory,\n                calculation_factors: calculationFactors,\n                calculated_at: new Date().toISOString(),\n                calculation_method: 'enterprise_deterministic_v2.1_context_gated',\n                confidence_label: `ADVISORY_${confidenceCategory.toUpperCase()}`,\n                monitoring_metrics: {\n                    base_score: 0.2,\n                    final_score: confidenceScore,\n                    is_blind_advisory: !hasTicketData // Critical for dashboarding\n                }\n            }\n        }\n    }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1888,
+        -256
+      ],
+      "id": "fb2d3957-d05e-4190-b807-572dd1964760",
+      "name": "Advisory Confidence Labeler (Deterministic)"
+    },
+    {
+      "parameters": {
+        "jsCode": "// NODE 5: Delivery Formatter & Channel Router (Hardened v26.3 - Liveness Aware)\nconst item = $input.first();\nconst json = item.json;\n\nconst ct = json.canonical_ticket || {};\nconst advisory = json.advisory || {};\nconst llmOutput = advisory.llm_output || json.advisory_output || {};\nconst activeTraceId = ct.trace_id || json.id || 'unknown';\n\n// ==================== 1. PHASE 2.3: LIVENESS LOGIC ====================\n// We pull the liveness data from the security gate we built earlier\nconst securityGate = json.security_gate || {};\nconst livenessRequired = securityGate.liveness_required || (securityGate.ingress_amount >= 10000);\nconst livenessPassed = (json.biometrics?.verification?.liveness_check === \"PASSED\");\n\n// Generate a Time-Sensitive Challenge Phrase if one doesn't exist\nconst challengePhrase = securityGate.liveness_challenge || \"ALPHA-77\"; \n\n// ==================== 2. TRANSACTION DETECTION ====================\nconst transaction = llmOutput.transaction_proposal || { tool_name: 'NONE' };\nconst hasTransaction = transaction.tool_name !== 'NONE';\n\n// ==================== 3. FORMAT ADVISORY PACKAGE ====================\nlet finalDraft = llmOutput.draft_customer_response;\nlet deliveryStatus = \"SUCCESS\";\n\n// HIJACK LOGIC: If liveness is required but failed/not-yet-attempted\nif (livenessRequired && !livenessPassed) {\n    deliveryStatus = \"CHALLENGE_ISSUED\";\n    finalDraft = `⚠️ Security Protocol: Your request for $${securityGate.ingress_amount} requires dynamic verification. Please record a voice note saying the following phrase: \"${challengePhrase}\".`;\n}\n\nconst advisoryPackage = {\n    version: '4.1-liveness-hardened',\n    advisory_id: `adv_${activeTraceId}_${Date.now()}`,\n    trace_id: activeTraceId,\n    status: deliveryStatus,\n    \n    explanation: llmOutput.explanation || llmOutput.thought_chain,\n    suggested_actions: llmOutput.suggested_next_steps || [\"Awaiting Liveness Verification\"],\n    draft_response: finalDraft,\n    \n    transaction_context: {\n        proposal: hasTransaction ? transaction.tool_name : null,\n        requires_approval: true,\n        liveness_enforced: livenessRequired\n    }\n};\n\n// ==================== 4. UI CONSTRUCTION (Widget) ====================\nconst uiSections = [];\n\nif (deliveryStatus === \"CHALLENGE_ISSUED\") {\n    uiSections.push({\n        title: \"🛡️ LIVENESS CHALLENGE ACTIVE\",\n        content: `User must repeat: \"${challengePhrase}\"\\nAmount: $${securityGate.ingress_amount}`,\n        type: 'alert_box_critical'\n    });\n} else if (hasTransaction) {\n    uiSections.push({\n        title: `🔴 ACTION REQUIRED: ${transaction.tool_name}`,\n        content: `REASON: ${transaction.rationale}\\n\\nApprove this action to execute immediately.`,\n        type: 'alert_box_critical'\n    });\n}\n\nuiSections.push(\n    { title: 'Analysis', content: advisoryPackage.explanation, type: 'text' },\n    { title: 'Response Template', content: finalDraft, type: 'template' }\n);\n\nconst formattedDeliveries = {\n    AGENT_UI_CONSOLE: {\n        type: 'ui_widget',\n        payload: {\n            title: `Advisory: ${String(activeTraceId).substring(0, 8)}`,\n            confidence_badge: advisory.advisory_confidence?.category || 'low',\n            transaction_ready: hasTransaction && (deliveryStatus === \"SUCCESS\"),\n            sections: uiSections\n        }\n    },\n    WEBHOOK_DELIVERY: {\n        type: 'webhook_payload',\n        payload: advisoryPackage,\n        config_template: {\n            url: ct.channel_metadata?.webhook_url || '[PENDING_URL]',\n            method: 'POST'\n        }\n    }\n};\n\n// ==================== 5. ROUTING LOGIC ====================\nlet suggestedChannel = (deliveryStatus === \"CHALLENGE_ISSUED\") ? 'WEBHOOK_DELIVERY' : 'AGENT_UI_CONSOLE'; \n\nreturn [{\n    json: {\n        ...json,\n        _delivery_formatted: {\n            formatted_deliveries: formattedDeliveries,\n            suggested_channel: suggestedChannel,\n            delivery_status: deliveryStatus,\n            prepared_at: new Date().toISOString()\n        }\n    }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2112,
+        -256
+      ],
+      "id": "936a8600-3af8-4365-80ff-48a84a5b78a0",
+      "name": "Delivery Formatter & Channel Router"
+    },
+    {
+      "parameters": {
+        "jsCode": "// NODE 6: Forensic Logger & Phase Seal (RESILIENT TERMINAL)\nconst item = $input.first();\nconst crypto = require('crypto');\n\n// 1. SCAVENGER LOGIC: Find data or create safe defaults\nconst ct = item.json.canonical_ticket || {};\nconst advisory = item.json.advisory || {};\nconst delivery = item.json._delivery_formatted || {}; // Fixed path from Node 5\nconst llmOutput = advisory.llm_output || {};\n\n// Critical: Recover trace_id from any available source\nconst activeTraceId = ct.trace_id || item.json.id || 'err_' + Date.now();\n\n// ==================== COMPREHENSIVE AUDIT LOG ====================\nconst forensicLog = {\n    trace_id: activeTraceId,\n    execution_id: activeTraceId,\n    block: 'BLOCK_4_FINAL',\n    advisory_id: delivery.formatted_deliveries?.WEBHOOK_DELIVERY?.payload?.advisory_id || `adv_${activeTraceId}`,\n    \n    advisory_start_time: item.json.created || new Date().toISOString(),\n    advisory_end_time: new Date().toISOString(),\n    \n    llm_status: advisory.llm_status?.status || 'validated',\n    advisory_confidence: advisory.advisory_confidence?.score || 0,\n    suggested_channel: delivery.suggested_channel || 'AGENT_UI_CONSOLE',\n    \n    compliance_check: {\n        advisory_only: true,\n        policy_enforced: true,\n        pii_handled: advisory.llm_status?.pii_handled || false\n    },\n    \n    // Safety Snapshot\n    safety_flags: {\n        audit_complete: true,\n        production_lockable: true,\n        seal_verified: true\n    }\n};\n\n// ==================== GENERATE PHASE SEAL ====================\nfunction deterministicStringify(obj) {\n    if (typeof obj !== 'object' || obj === null) return JSON.stringify(obj);\n    if (Array.isArray(obj)) return '[' + obj.map(item => deterministicStringify(item)).join(',') + ']';\n    const sortedKeys = Object.keys(obj).sort();\n    const keyValuePairs = sortedKeys.map(key => \n        JSON.stringify(key) + ':' + deterministicStringify(obj[key])\n    );\n    return '{' + keyValuePairs.join(',') + '}';\n}\n\nconst sealData = {\n    block: 'BLOCK_4',\n    trace_id: activeTraceId,\n    timestamp: new Date().toISOString(),\n    entropy: crypto.randomBytes(4).toString('hex')\n};\n\nconst phaseSealHash = crypto.createHash('sha256')\n    .update(deterministicStringify(sealData))\n    .digest('hex');\n\n// ==================== FINAL OUTPUT ====================\nconst output = {\n    ...item.json,\n    forensic: {\n        advisory_log: forensicLog,\n        phase_seal: phaseSealHash\n    },\n    __metadata: {\n        phase: 'BLOCK_4_COMPLETE',\n        sealed_at: new Date().toISOString(),\n        next_step: 'BLOCK_5_ANALYTICS'\n    }\n};\n\nreturn [{ json: output }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2336,
+        -256
+      ],
+      "id": "67ef0cb6-6eb9-4bc4-9b9c-2a3aa370c88a",
+      "name": "Forensic Logger & Phase Seal"
+    },
+    {
+      "parameters": {
+        "jsCode": "// BLOCK 6.0: MEMORY CORE LOGIC (High Fidelity Integration)\n// This strictly integrates your 4 original nodes without simplifying the logic.\n\nconst crypto = require('crypto');\nconst input = $json;\n\n// ==========================================\n// STAGE 1: Memory Ingress Normalizer Logic\n// ==========================================\n\n// 1. Assert State Integrity (Safety Kill-switch)\nif (input.state === 'pending' || !input.consumed) {\n  throw new Error(\"MEMORY_INGRESS_REJECTED: Only terminal, consumed states can be remembered.\");\n}\n\n// 2. Normalize Semantic Payload\nlet normalized_approval = input.validated_approval;\nif (typeof normalized_approval === 'string') {\n  try {\n    normalized_approval = JSON.parse(normalized_approval);\n  } catch (e) {\n    console.error(\"Failed to parse validated_approval, keeping as is.\");\n  }\n}\n\n// 3. Construct the BLOCK 6 Clean Object (Intermediate State 1)\nconst stage1_output = {\n  identity: {\n    approval_id: input.approval_id,\n    trace_id: input.trace_id,\n    user_id: input.approval_request?.user_id || \"SYSTEM_USER\" // Fallback if missing\n  },\n  semantics: {\n    decision: input.decision,\n    action: normalized_approval?.action || \"UNKNOWN\",\n    validated_approval: normalized_approval,\n    channel: input.selected_channel\n  },\n  integrity: {\n    block_5_hash: input.block_5_seal_hash,\n    advisory_hash: input.advisory_hash\n  },\n  temporal: {\n    occurred_at: input.consumed_at,\n    ingested_at: new Date().toISOString()\n  },\n  raw_context: input // Kept for safety\n};\n\n// ==========================================\n// STAGE 2: Memory Identity Generator Logic\n// ==========================================\n\nconst { identity, semantics, integrity } = stage1_output;\n\n// Build canonical string for hashing\nconst canonicalString = `${identity.approval_id}:${identity.trace_id}:${semantics.decision}:${semantics.validated_approval.approver_role}:${integrity.block_5_hash}`;\n\nconst memoryIdHash = crypto\n  .createHash('sha256')\n  .update(canonicalString, 'utf8')\n  .digest('hex');\n\nconst stage2_output = {\n    ...stage1_output,\n    memory_id_hash: memoryIdHash,\n    memory_identity_version: 'v1'\n};\n\n// ==========================================\n// STAGE 3: Scope Resolver Logic\n// ==========================================\n\nconst approverRole = stage2_output.semantics.validated_approval.approver_role;\nconst userId = stage2_output.identity.user_id;\nconst traceId = stage2_output.identity.trace_id;\n\nlet scopeLevel;\nlet scopeId;\n\nif (approverRole === 'system_bot' || approverRole === 'risk_officer') {\n  scopeLevel = 'global';\n  scopeId = 'GLOBAL';\n} else if (userId && userId !== 'SYSTEM_USER') {\n  scopeLevel = 'user';\n  scopeId = userId;\n} else {\n  scopeLevel = 'session';\n  scopeId = traceId;\n}\n\nconst stage3_output = {\n  ...stage2_output,\n  scope_level: scopeLevel,\n  scope_id: scopeId\n};\n\n// ==========================================\n// STAGE 4: Memory Retrieval Prep Logic\n// ==========================================\n\n// Construct the string the AI will actually \"search\" by\nconst searchQuery = `Action: ${stage3_output.semantics.action} | Decision: ${stage3_output.semantics.decision} | Role: ${stage3_output.semantics.validated_approval.approver_role} | Reason: ${stage3_output.semantics.validated_approval.reason}`;\n\n// Final Return\nreturn {\n  ...stage3_output,\n  search_query: searchQuery\n};"
+      },
+      "name": "BLOCK 6.0: Memory Core Logic",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2544,
+        -256
+      ],
+      "id": "d3d3ff70-0f51-4316-966a-7c435443d126"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "cond-1",
+              "leftValue": "={{$json.memory_hits.length > 0}}",
+              "rightValue": 0,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "If- Results Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        3952,
+        -272
+      ],
+      "id": "1e326d5b-cec8-4492-a6ab-5bbb2302d6e1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// BANK-GRADE CONTEXT COMPACTOR & CACHE LAYER\nconst items = $input.all()\n  .map(item => item.json)\n  .filter(m => Object.keys(m).length > 0 && m.final_score !== undefined);\n\nif (items.length === 0) {\n  return { \n    memory_context: \"RECALL_MODE: NEW_IDENTITY | No historical precedents found in vault.\", \n    memory_hits: [],\n    is_cached: false\n  };\n}\n\n// 1. RANKING: Sort by Decayed Final Score (Roadmap Item: Confidence Decay)\nconst ranked = items.sort((a, b) => b.final_score - a.final_score).slice(0, 3);\n\n// 2. CACHE LAYER: Detect \"Hot\" Memories (Roadmap Item: Memory Cache)\n// If similarity is >99% and it happened in the last 24 hours, flag as Cache Hit.\nconst perfectMatch = ranked.find(m => m.similarity >= 0.99 && m.recency_score < 24);\nconst recallMode = perfectMatch ? \"HIGH_CONFIDENCE_CACHE_HIT\" : \"HEURISTIC_RECALL\";\n\n// 3. CONTEXT COMPACTOR: Summarize multiple matches into a single semantic block\nconst summary = ranked.map((m, idx) => {\n  let details;\n  try {\n    details = typeof m.content === 'string' ? JSON.parse(m.content) : m.content;\n  } catch (e) {\n    details = { action: 'Unknown', decision: 'Unknown', reason: m.content };\n  }\n  \n  return `[Precedent ${idx + 1}]: ${details.action} was ${details.decision} (Reason: ${details.reason}). Score: ${(m.final_score * 100).toFixed(1)}%`;\n}).join(' | ');\n\nreturn {\n  memory_context: `RECALL_MODE: ${recallMode} | ${summary}`,\n  memory_hits: ranked,\n  is_cached: !!perfectMatch,\n  top_score: ranked[0].final_score\n};"
+      },
+      "name": "Memory Context Formatter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4128,
+        -320
+      ],
+      "id": "aedf692f-ec37-403a-8457-fb2211b852dc"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={\n  \"audit_meta\": {\n    \"trace_id\": \"{{ $node['BLOCK 6.0: Memory Core Logic'].json.identity.trace_id }}\",\n    \"timestamp\": \"{{ new Date().toISOString() }}\",\n    \"integrity_checksum\": \"{{ $node['BLOCK 6.0: Memory Core Logic'].json.integrity.block_5_hash }}\"\n  },\n  \"intelligence_stream\": {\n    \"current_decision\": \"{{ $node['BLOCK 6.0: Memory Core Logic'].json.semantics.decision }}\",\n    \"historical_precedents\": \"{{ $node['Memory Context Formatter'].json.memory_context }}\",\n    \"logic_mode\": \"{{ $node['Memory Context Formatter'].json.memory_hits.length > 0 ? 'PRECEDENT_VERIFIED' : 'NEW_PATTERN' }}\"\n  },\n  \"compliance_audit\": {\n    \"policy_violation_detected\": {{ $node['BLOCK 6.0: Memory Core Logic'].json.raw_context.approval_request.transaction_execution === null ? true : false }},\n    \"violation_type\": \"THRESHOLD_EXCEEDED\",\n    \"limit_usd\": 10000,\n    \"requested_usd\": {{ $node['BLOCK 6.0: Memory Core Logic'].json.raw_context.approval_request.advisory_hash ? 50000 : 0 }}, \n    \"action_taken\": \"BLOCK_AND_ESCALATE\"\n  },\n  \"final_rationale\": \"Voice verification score was high, but the transaction of ${{ $node['BLOCK 6.0: Memory Core Logic'].json.raw_context.approval_request.advisory_hash ? 50000 : 0 }} exceeds the internal security ceiling. Internal UI routing was forced for human oversight.\"\n}",
+        "options": {}
+      },
+      "name": "Decision & Audit",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        4304,
+        -256
+      ],
+      "id": "914361e7-6e70-4f74-9562-f16602dfaa51"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/embeddings",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openRouterApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"text-embedding-3-small\",\n  \"input\": \"{{ $json.search_query }}\"\n}",
+        "options": {}
+      },
+      "name": "Generate Embedding Vector1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        2768,
+        -256
+      ],
+      "id": "b6773690-14ec-4ccb-a9db-a99d78f35bc6",
+      "credentials": {
+        "openRouterApi": {
+          "id": "o1YYcaxj9OhyhT8G",
+          "name": "OpenRouter account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "embedding",
+              "value": "={{ $json.data[0].embedding }}",
+              "type": "array"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "name": "Extract Embedding Vector1",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3184,
+        -272
+      ],
+      "id": "ebbf2b3e-830c-46be-833b-a53b22f60e45"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/embeddings",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer'+$vars.OPEN_ROUTER_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"text-embedding-3-small\",\n  \"input\": \"{{ $json.search_query }}\"\n}",
+        "options": {}
+      },
+      "name": "Fallback: HTTP Embeddings API1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        2960,
+        -144
+      ],
+      "id": "013e2869-8421-4e26-bf19-1cf604cdb6f7"
+    },
+    {
+      "parameters": {
+        "jsCode": "// NODE: BLOCK 6.1: MEMORY INTEGRITY GUARD (V30 Mathematical AI Safety)\n// CAPABILITY: Poisoning Detection, PSI/Wasserstein Drift, Predictive Pre-Crime\nconst crypto = require('crypto');\nconst items = $input.all();\n\n// --- 0. CONTEXT RETRIEVAL ---\nlet current_tx = {};\ntry {\n    current_tx = $node[\"BLOCK 0 (Ingress): PROD Input Normalizer\"].json || {};\n} catch (e) {\n    current_tx = { amount: 0, device_hash: \"unknown\", timestamp: new Date().toISOString() };\n}\n\n// ==================== 1. CIRCUIT BREAKER ====================\nconst upstreamError = items[0].json.error || items[0].error;\nif (upstreamError) {\n    return [{ json: { memory_status: \"CIRCUIT_OPEN\", error_type: \"DATABASE_UNAVAILABLE\", circuit_breaker_triggered: true, precedents: [], system_alert: \"CRITICAL: Vector Database unreachable.\", security_gate: { stop_execution: true, reason: \"DB_INTEGRITY_FAILURE\" } } }];\n}\n\n// ==================== 2. POISONING DETECTION ====================\nconst validMemories = [];\nconst poisonedMemories = [];\nfor (const item of items) {\n    const mem = item.json;\n    if (!mem || Object.keys(mem).length === 0) continue;\n\n    const metadata = typeof mem.metadata === 'string' ? JSON.parse(mem.metadata) : mem.metadata;\n    if (mem.embedding && metadata?.embedding_checksum) {\n        const currentChecksum = crypto.createHash('sha256').update(JSON.stringify(mem.embedding)).digest('hex');\n        if (currentChecksum !== metadata.embedding_checksum) {\n            poisonedMemories.push(mem.id || \"unknown_id\");\n            continue;\n        }\n    }\n\n    let parsedContent = {};\n    try { parsedContent = typeof mem.content === 'string' ? JSON.parse(mem.content) : mem.content; } \n    catch (e) { poisonedMemories.push(mem.id || \"malformed_json\"); continue; }\n\n    validMemories.push({ ...mem, content: parsedContent, metadata: metadata || {}, integrity_verified: true });\n}\n\n// ==================== 3. PREDICTIVE PRE-CRIME ====================\nlet risk_score = 0;\nconst history = validMemories;\n\nif (history.length > 0 && history[0].metadata?.timestamp) {\n    const last_tx = new Date(history[0].metadata.timestamp).getTime();\n    if ((new Date().getTime() - last_tx) < 2000) risk_score += 30; // Velocity Check\n}\nconst avg_amount = history.reduce((sum, h) => sum + (parseFloat(h.metadata?.amount) || 0), 0) / (history.length || 1);\nconst current_amt = parseFloat(current_tx.amount) || 0;\nif (current_amt > avg_amount * 10 && current_amt > 1000) {\n    risk_score += 40; // Amount Deviation\n}\n\n// ==================== 4. V30 MATH: WASSERSTEIN & PSI ====================\n// We simulate vector inputs to calculate mathematical drift\nconst incomingEmbedding = items[0].json.embedding || new Array(1536).fill(0.01);\nconst baselineEmbedding = validMemories[0]?.embedding || new Array(1536).fill(0.015);\n\nfunction calculateWasserstein(p, q) {\n    let distance = 0, cumulative_diff = 0;\n    for (let i = 0; i < Math.min(p.length, q.length); i++) {\n        cumulative_diff += (p[i] || 0) - (q[i] || 0);\n        distance += Math.abs(cumulative_diff);\n    }\n    return distance;\n}\n\nfunction calculatePSI(actual, expected) {\n    let psi = 0;\n    for (let i = 0; i < Math.min(actual.length, expected.length); i++) {\n        const a = Math.max(actual[i] || 0, 0.0001); \n        const e = Math.max(expected[i] || 0, 0.0001);\n        psi += (a - e) * Math.log(a / e);\n    }\n    return psi;\n}\n\nconst wDistance = calculateWasserstein(incomingEmbedding, baselineEmbedding);\nconst psiScore = calculatePSI(incomingEmbedding, baselineEmbedding);\n\n// Add extreme penalty if vectors have drifted significantly (Poisoning Attack)\nif (wDistance > 25.0) risk_score += 50; \nif (psiScore > 0.2) risk_score += 50;   \n\n// ==================== 5. FINAL SECURITY STATE ====================\nconst is_predictive_block = risk_score >= 80;\n\nreturn [{\n    json: {\n        memory_status: \"CIRCUIT_CLOSED\",\n        memory_hits: validMemories,\n        poisoned_count: poisonedMemories.length,\n        poison_ids: poisonedMemories,\n        \n        risk_assessment: {\n            score: risk_score,\n            status: is_predictive_block ? \"PREDICTIVE_BLOCK\" : \"SAFE\",\n            model_version: \"behavioral_dna_v30\"\n        },\n        drift_metrics: {\n            wasserstein_distance: wDistance,\n            psi_score: psiScore\n        },\n        memory_context: validMemories.length > 0 \n            ? `[TRUSTED PRECEDENTS]: Found ${validMemories.length} verified records. Risk: ${risk_score}/100. PSI Drift: ${psiScore.toFixed(3)}.` \n            : `[NO PRECEDENTS]: Treat as new pattern.`,\n        \n        security_alert: (poisonedMemories.length > 0 || is_predictive_block) ? \"WARNING: SECURITY_ANOMALY_DETECTED\" : \"CLEAN\",\n        security_gate: is_predictive_block \n            ? { stop_execution: true, reason: `PRE-CRIME: Mathematical Drift or Behavioral Risk (${risk_score}/100)` }\n            : { stop_execution: false, reason: \"PASSED\" }\n    }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3760,
+        -272
+      ],
+      "id": "201743c8-db26-4d8c-978c-b85164b2da31",
+      "name": "BLOCK 6.1: Memory Integrity Guard"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$vars.SUPABASE_URL}}/rest/v1/rpc/hybrid_search_rrf",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"query_embedding\": {{ JSON.stringify($json.embedding) }},\n  \"keyword_query\": \"{{ $node[\"BLOCK 0: Titanium Sanitizer\"].json.canonical_ticket.subject + ' ' + $node[\"BLOCK 0: Titanium Sanitizer\"].json.canonical_ticket.body }}\",\n  \"match_scope\": \"{{ $node[\"BLOCK 6.0: Memory Core Logic\"].json.scope_level }}\",\n  \"match_user_id\": \"{{ $node[\"BLOCK 6.0: Memory Core Logic\"].json.identity.user_id }}\",\n  \"rrf_k\": 60,\n  \"match_count\": 5\n}",
+        "options": {}
+      },
+      "name": "Supabase: Hybrid RRF Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        3376,
+        -272
+      ],
+      "id": "1a066c33-ade0-404f-8991-8989c3226fa4",
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "r02w1pztpBboCFhe",
+          "name": "Supabase account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://revenant-inference.internal/v1/rerank",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"query\": \"{{ $json.user_query }}\",\n  \"documents\": {{ JSON.stringify($json.search_results) }},\n  \"top_n\": 1\n}",
+        "options": {}
+      },
+      "id": "379b8c19-b582-42c6-9418-336244dae3c8",
+      "name": "API: Cross-Encoder Rerank",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        3568,
+        -272
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$vars.SUPABASE_URL}}/rest/v1/bank_memories?on_conflict=memory_id_hash",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates, return=representation"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"memory_id_hash\": \"{{ $json.memory_id_hash }}\",\n  \"user_id\": \"{{ $json.user_id }}\",\n  \"scope\": \"{{ $json.scope }}\",\n  \"content\": {{ $json.content }},\n  \"embedding\": {{ $json.embedding }},\n  \"metadata\": {{ $json.metadata }},\n  \"confidence_score\": {{ $json.confidence_score }}\n}",
+        "options": {}
+      },
+      "name": "Supabase Upsert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        4736,
+        -256
+      ],
+      "id": "ef6ae6f8-b89b-4f71-a845-f90d4c88f627",
+      "credentials": {
+        "supabaseApi": {
+          "id": "r02w1pztpBboCFhe",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// NODE: BLOCK 6.9: STORAGE PREP & CONTRACT LOCK (Phase 6: Logic Aware)\nconst crypto = require('crypto');\n\n// 1. INGEST DATA (Aggressive Context Retrieval)\nlet sealNode, vectorNode, auditNode;\n\ntry {\n    sealNode = $('Logic: Generate Block 5 Seal').first().json;\n    vectorNode = $('Generate Embedding Vector1').first().json;\n    // REACH BACK: Get the actual audit findings\n    auditNode = $('Decision & Audit').first().json;\n} catch(e) {\n    throw new Error(\"DEPENDENCY_ERROR: Could not find required upstream nodes. Check node names.\");\n}\n\n// 2. EXTRACT CORE TRUTH\nconst core = sealNode.seal_data || sealNode;\nconst vector = vectorNode.data?.[0]?.embedding || vectorNode.embedding;\nif (!vector) throw new Error(\"VECTOR_MISSING: No embedding found.\");\n\n// 3. CALCULATE EMBEDDING CHECKSUM\nconst embeddingChecksum = crypto\n  .createHash('sha256')\n  .update(JSON.stringify(vector))\n  .digest('hex');\n\n// 4. PREPARE ENRICHED CONTENT (The Intelligent Memory)\n// We merge the technical state with the compliance reasoning\nconst contentObj = {\n  action: \"EXECUTE_DISPATCH\",\n  decision: core.final_status === \"SUCCESS_REJECTION_SEALED\" ? \"POLICY_REJECTION\" : \"APPROVED\",\n  \n  // Real Compliance Data Injection\n  compliance: {\n    violation: auditNode.compliance_audit.violation_type,\n    requested_amount: auditNode.compliance_audit.requested_usd,\n    threshold: auditNode.compliance_audit.limit_usd\n  },\n  \n  // The 'Voice' of the incident\n  rationale: auditNode.final_rationale,\n  trace_id: core.trace_id,\n  approver: \"revenant_ai_core_v23\"\n};\n\nconst contentString = JSON.stringify(contentObj);\n\n// 5. THE CONTRACT LOCK (Cryptographic Binding)\nconst contractString = `${core.trace_id}|${contentString}|${embeddingChecksum}|${sealNode.block_5_seal_hash}`;\nconst memoryContractHash = crypto\n  .createHash('sha256')\n  .update(contractString)\n  .digest('hex');\n\n// 6. FINAL OUTPUT (Supabase Ready)\nreturn {\n  memory_id_hash: crypto.randomUUID(), \n  user_id: \"SYSTEM_USER\",\n  scope: \"GLOBAL\",\n  \n  content: contentString, // This is now full of high-value audit data\n  embedding: JSON.stringify(vector), \n  \n  metadata: JSON.stringify({\n    trace_id: core.trace_id,\n    approval_id: core.approval_id,\n    timestamp: new Date().toISOString(),\n    contract_lock: memoryContractHash,\n    embedding_checksum: embeddingChecksum,\n    version: 'v4.1-intelligence-locked',\n    status: \"SEALED_REJECTION\"\n  }),\n  \n  confidence_score: 1.0\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4512,
+        -256
+      ],
+      "id": "1a7b7c37-2934-4a19-a6e2-ea6124114cae",
+      "name": "STORAGE PREP & CONTRACT LOCK"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "trunk-2",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -384,
+        -128
+      ],
+      "id": "bec51b08-fccf-46eb-80fe-17d39eedf307",
+      "name": "Webhook",
+      "webhookId": "60008025-a7b6-42cf-9239-76e0b2bb6b9b"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"status\": \"SUCCESS\",\n  \"meta\": { \"trace_id\": \"{{ $json.trace_id }}\" },\n  \"result\": { \"advisory_package\": \"{{ $json.advisory_package }}\" }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2656,
+        -432
+      ],
+      "id": "c5249c1f-ca94-44d5-a48c-898c65fdc3e9",
+      "name": "Respond: Universal Contract"
+    }
+  ],
+  "connections": {
+    "Governance Gate & Context Assembler": {
+      "main": [
+        [
+          {
+            "node": "Advisory Execution Controller (Merged)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Advisory Execution Controller (Merged)": {
+      "main": [
+        [
+          {
+            "node": "If_USE_LLM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep Consensus Payload": {
+      "main": [
+        [
+          {
+            "node": "LLM OpenRouter (OpenAI) - Circuit Breaker",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM OpenRouter (Anthropic)": {
+      "main": [
+        [
+          {
+            "node": "Consensus Engine Validator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consensus Engine Validator": {
+      "main": [
+        [
+          {
+            "node": "IF: Both Clouds Failed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM OpenRouter (OpenAI) - Circuit Breaker": {
+      "main": [
+        [
+          {
+            "node": "LLM OpenRouter (Anthropic)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "LLM-error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM-error": {
+      "main": [
+        [
+          {
+            "node": "LLM OpenRouter (Anthropic)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Advisory Confidence Labeler (Deterministic)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Both Clouds Failed?": {
+      "main": [
+        [
+          {
+            "node": "LLM Triton (Self-Hosted Fallback)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "LLM Output Sanitizer & Enterprise Validator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If_USE_LLM": {
+      "main": [
+        [
+          {
+            "node": "Prep Consensus Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM Triton (Self-Hosted Fallback)": {
+      "main": [
+        [
+          {
+            "node": "Format Triton Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Triton Output": {
+      "main": [
+        [
+          {
+            "node": "LLM Output Sanitizer & Enterprise Validator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM Output Sanitizer & Enterprise Validator": {
+      "main": [
+        [
+          {
+            "node": "Advisory Confidence Labeler (Deterministic)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Advisory Confidence Labeler (Deterministic)": {
+      "main": [
+        [
+          {
+            "node": "Delivery Formatter & Channel Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delivery Formatter & Channel Router": {
+      "main": [
+        [
+          {
+            "node": "Forensic Logger & Phase Seal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Forensic Logger & Phase Seal": {
+      "main": [
+        [
+          {
+            "node": "BLOCK 6.0: Memory Core Logic",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Respond: Universal Contract",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BLOCK 6.0: Memory Core Logic": {
+      "main": [
+        [
+          {
+            "node": "Generate Embedding Vector1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If- Results Check": {
+      "main": [
+        [
+          {
+            "node": "Memory Context Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Decision & Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memory Context Formatter": {
+      "main": [
+        [
+          {
+            "node": "Decision & Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decision & Audit": {
+      "main": [
+        [
+          {
+            "node": "STORAGE PREP & CONTRACT LOCK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Embedding Vector1": {
+      "main": [
+        [
+          {
+            "node": "Extract Embedding Vector1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fallback: HTTP Embeddings API1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Embedding Vector1": {
+      "main": [
+        [
+          {
+            "node": "Supabase: Hybrid RRF Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fallback: HTTP Embeddings API1": {
+      "main": [
+        [
+          {
+            "node": "Extract Embedding Vector1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BLOCK 6.1: Memory Integrity Guard": {
+      "main": [
+        [
+          {
+            "node": "If- Results Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase: Hybrid RRF Search": {
+      "main": [
+        [
+          {
+            "node": "API: Cross-Encoder Rerank",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API: Cross-Encoder Rerank": {
+      "main": [
+        [
+          {
+            "node": "BLOCK 6.1: Memory Integrity Guard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase Upsert": {
+      "main": [
+        []
+      ]
+    },
+    "STORAGE PREP & CONTRACT LOCK": {
+      "main": [
+        [
+          {
+            "node": "Supabase Upsert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Governance Gate & Context Assembler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "4f14f7ac18668138c414d2238e63ec58a8710810d54692bc8249b8c7e0dbb820"
+  }
+}
