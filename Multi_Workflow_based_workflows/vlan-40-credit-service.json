@@ -1,0 +1,183 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "/**\n * REVENANT V31-F4 — \"Block 4.5: Credit Eligibility Scorer (Mock Data Injector)\"\n * Position: After Intent/Entity Extraction, before Credit Decision Engine.\n * Mocks an internal Credit Bureau lookup keyed off customer identity.\n * CRITICAL: No require('crypto'), no external libraries — pure JS only.\n */\n\nconst items = $input.all();\nconst returnData = [];\n\n// ---------------------------------------------------------------------------\n// MOCK CREDIT BUREAU — keyed by test identity for deterministic QA routing.\n// ---------------------------------------------------------------------------\nconst MOCK_BUREAU = {\n  'good@test.com':       { credit_score: 750, dbr: 30, fraud_flag: false, blacklist_status: false },\n  'borderline@test.com': { credit_score: 650, dbr: 45, fraud_flag: false, blacklist_status: false },\n  'bad@test.com':        { credit_score: 500, dbr: 60, fraud_flag: true,  blacklist_status: false },\n};\n\n// Fallback profile for any identity not in the mock bureau — fails closed\n// (treated as high risk) rather than silently passing an unknown customer.\nconst UNKNOWN_PROFILE = { credit_score: 0, dbr: 100, fraud_flag: true, blacklist_status: false };\n\nfor (const item of items) {\n  const ticket = item.json.canonical_ticket;\n\n  // Locate intent across potential schema variations from upstream\n  const intent = ticket?.rule_engine?.intent || ticket?.rule_based_intent;\n\n  // Gracefully ignore anything that isn't a loan origination ticket.\n  if (!ticket || intent !== 'LOAN_ORIGINATION') {\n    returnData.push(item);\n    continue;\n  }\n\n  // Identity lookup key: prefer email, fall back to the resolved P2P phone\n  // target if that's the only identity attached to this ticket.\n  const identityKey = (ticket.customer_email || ticket.p2p_target_canonical || '').toLowerCase();\n\n  const bureauResult = MOCK_BUREAU[identityKey] || UNKNOWN_PROFILE;\n\n  ticket.credit_profile = {\n    ...bureauResult,\n    identity_key: identityKey || null,\n    source: 'MOCK_CREDIT_BUREAU',\n    looked_up_at: new Date().toISOString(),\n  };\n\n  item.json.canonical_ticket = ticket;\n  returnData.push(item);\n}\n\nreturn returnData;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        2064
+      ],
+      "id": "76e210cd-2365-4f6b-b70c-5118099b1199",
+      "name": "Block 4.5: Credit Eligibility Scorer (Mock Data Injector)"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * REVENANT V31-F4 — \"Block 4.6: Credit Decision Engine (Strict Threshold Routing)\"\n * Position: directly after Block 4.5: Credit Eligibility Scorer.\n * CRITICAL EXECUTION ORDER (do not reorder): AUTO_REJECT checked before\n * AUTO_APPROVE, so a single disqualifying factor can never be masked by an\n * otherwise-strong profile. Anything that survives both is REQUIRES_HITL.\n */\n\nconst items = $input.all();\nconst returnData = [];\n\nfor (const item of items) {\n  const ticket = item.json.canonical_ticket;\n\n  // Locate intent across potential schema variations from upstream\n  const intent = ticket?.rule_engine?.intent || ticket?.rule_based_intent;\n\n  // Gracefully ignore anything that isn't a loan origination ticket.\n  if (!ticket || intent !== 'LOAN_ORIGINATION') {\n    returnData.push(item);\n    continue;\n  }\n\n  const profile = ticket.credit_profile || {};\n  const credit_score = Number(profile.credit_score);\n  const dbr = Number(profile.dbr);\n  const fraud_flag = profile.fraud_flag === true;\n  const blacklist_status = profile.blacklist_status === true;\n\n  // Safely extract requested amount (if missing, becomes NaN)\n  const requested_amount = Number(ticket.loan_request?.requested_amount);\n\n  let status;\n  let reason;\n\n  // 1. AUTO_REJECT — evaluated first, any single trigger is disqualifying.\n  if (credit_score < 600 || dbr > 50 || fraud_flag || blacklist_status) {\n    status = 'AUTO_REJECT';\n    const triggers = [];\n    if (credit_score < 600) triggers.push('CREDIT_SCORE_BELOW_600');\n    if (dbr > 50) triggers.push('DBR_ABOVE_50');\n    if (fraud_flag) triggers.push('FRAUD_FLAG_TRUE');\n    if (blacklist_status) triggers.push('BLACKLIST_STATUS_TRUE');\n    reason = triggers.join(', ');\n\n  // 2. AUTO_APPROVE — only reachable if reject rules above did not trigger.\n  } else if (Number.isFinite(requested_amount) && requested_amount <= 5000000 && credit_score >= 700 && dbr < 40) {\n    status = 'AUTO_APPROVE';\n    reason = 'PASSED_AUTO_APPROVE_THRESHOLDS';\n\n  // 3. FALLBACK — passed reject checks but missed an auto-approve threshold.\n  } else {\n    status = 'REQUIRES_HITL';\n    const reasons = [];\n    if (!Number.isFinite(requested_amount) || requested_amount > 5000000) reasons.push('AMOUNT_ABOVE_5M_OR_INVALID');\n    if (credit_score < 700) reasons.push('SCORE_BELOW_700');\n    if (dbr >= 40) reasons.push('DBR_AT_OR_ABOVE_40');\n    reason = reasons.length ? reasons.join(', ') : 'BORDERLINE_PROFILE';\n  }\n\n  ticket.credit_decision = {\n    status,\n    reason,\n    policy_version: 'V31_F4',\n  };\n\n  // false only for a hard reject; HITL still proceeds (true), same as approve.\n  ticket.block46_passed = status !== 'AUTO_REJECT';\n\n  item.json.canonical_ticket = ticket;\n  returnData.push(item);\n}\n\nreturn returnData;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        2064
+      ],
+      "id": "b2ced964-ccce-4c56-8568-846006fd7524",
+      "name": "Block 4.6: Credit Decision Engine (Strict Threshold Routing)"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * REVENANT V31-F4 — \"Block 4.7: e-Signature Dispatcher\" (TIER 4)\n * Upgraded to explicitly route REQUIRES_HITL to Block 8.3 and build signatures.\n */\n\nconst items = $input.all();\nconst returnData = [];\n\nfunction generatePureJSHash(str) {\n  let hash = 0x811c9dc5;\n  for (let i = 0; i < str.length; i++) {\n    hash ^= str.charCodeAt(i);\n    hash = Math.imul(hash, 0x01000193);\n  }\n  return (hash >>> 0).toString(16);\n}\n\nfor (const item of items) {\n  const ticket = item.json.canonical_ticket;\n  \n  // Skip if not a loan\n  if (!ticket || ticket.rule_based_intent !== 'LOAN_ORIGINATION') {\n    returnData.push(item);\n    continue;\n  }\n\n  const decision = item.json.credit_decision || {};\n\n  // --- TIER 4 FIX: Route REQUIRES_HITL explicitly ---\n  if (decision.status === 'REQUIRES_HITL') {\n    if (!ticket.routing_decision) ticket.routing_decision = {};\n    ticket.routing_decision.route = 'HITL_REVIEW'; // Block 8.3 catches this\n    ticket.ticket_status = 'PENDING_HUMAN_REVIEW';\n    ticket.block47_report = 'ROUTED_TO_HITL';\n    \n    // Provide a localized draft response for the delay\n    if (!item.json.advisory) item.json.advisory = {};\n    if (!item.json.advisory.llm_output) item.json.advisory.llm_output = {};\n    item.json.advisory.llm_output.draft_customer_response = \"Sizning kredit so'rovingiz qo'shimcha tekshirish uchun mutaxassislarimizga yuborildi. Tez orada siz bilan bog'lanamiz.\";\n    \n    item.json.canonical_ticket = ticket;\n    returnData.push(item);\n    continue;\n  }\n\n  // --- EXISTING AUTO-APPROVE LOGIC (Preserved & Cleaned) ---\n  if (decision.status === 'AUTO_APPROVE') {\n     const amount = decision.approved_amount || ticket.transaction_amount;\n     \n     // 1. Generate Stateless Context Token\n     const tokenPayload = {\n       trace_id: ticket.trace_id,\n       amount: amount,\n       customer_id: ticket.customer_email || item.json.source_email || 'CUST-001',\n       timestamp: Date.now()\n     };\n     \n     // n8n safe base64 encoding\n     const paymentToken = Buffer.from(JSON.stringify(tokenPayload)).toString('base64');\n     const tokenSignature = generatePureJSHash(paymentToken);\n     \n     // 2. Build Telegram Button\n     const telegramKeyboard = {\n       inline_keyboard: [[\n         {\n           text: '✍️ Shartnomani Imzolash (Sign Contract)',\n           callback_data: `SIGN_LOAN|${paymentToken}|${tokenSignature}`\n         }\n       ]]\n     };\n     \n     if (!item.json.advisory) item.json.advisory = {};\n     if (!item.json.advisory.llm_output) item.json.advisory.llm_output = {};\n     \n     item.json.advisory.llm_output.transaction_proposal = {\n        tool_name: \"LOAN_ORIGINATION\",\n        telegram_action: telegramKeyboard\n     };\n     item.json.advisory.llm_output.draft_customer_response = `Sizning ${amount} UZS miqdoridagi mikroqarzingiz ma'qullandi! Qabul qilish uchun quyidagi tugmani bosib shartnomani imzolang.`;\n     \n     ticket.block47_report = 'E_SIGNATURE_DISPATCHED';\n     item.json.canonical_ticket = ticket;\n     returnData.push(item);\n     continue;\n  }\n  \n  returnData.push(item);\n}\nreturn returnData;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        656,
+        2064
+      ],
+      "id": "c26eba6f-cfdd-492e-807c-fefe5ec9dd72",
+      "name": "Block 4.7: e-Signature Dispatcher (Stateless Tokenization)"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * REVENANT V31-F4 — \"Block 5.1: Credit Disbursement Trigger\" (TIER 4)\n * Upgraded to include explicit customer/account identifiers in the payload.\n */\n\nconst items = $input.all();\nconst returnData = [];\n\nfor (const item of items) {\n  const ticket = item.json.canonical_ticket;\n  \n  if (!ticket || ticket.routing_decision?.route !== 'LOAN_ORIGINATION' || item.json.status !== 'EXECUTE_LOAN') {\n    returnData.push(item);\n    continue;\n  }\n\n  // --- TIER 4 FIX: Add customer/account identifiers explicitly ---\n  const customerId = ticket.customer_id || item.json.source_email || 'UNKNOWN_CUST_ID';\n  const targetAccount = ticket.customer_wallet_id || ticket.p2p_target_canonical || 'ACC-DEFAULT-WALLET-01';\n  const amount = ticket.transaction_amount;\n\n  item.json.core_banking_request = {\n    transaction_type: 'CREDIT_DISBURSEMENT',\n    system_trace_id: ticket.trace_id,\n    amount: amount,\n    currency: 'UZS',\n    // Newly added fields:\n    customer_id: customerId,\n    credit_account_id: targetAccount,\n    debit_account_id: 'BANK-BULLION-ACC-001', \n    description: `Micro-loan disbursement for ${customerId}`,\n    timestamp: new Date().toISOString()\n  };\n\n  ticket.block51_passed = true;\n  ticket.block51_report = 'DISBURSEMENT_PAYLOAD_BUILT';\n  item.json.canonical_ticket = ticket;\n  \n  returnData.push(item);\n}\n\nreturn returnData;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        464,
+        2256
+      ],
+      "id": "5ed5158f-073c-42b6-9e76-0882c6e27da6",
+      "name": "Block 5.1: Credit Disbursement Trigger (Core Banking Payload)"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * REVENANT V31-F4 — \"Block 5.0: Loan Signature Catcher\"\n * Catches the SIGN_LOAN callback, verifies signature, decodes context.\n */\n\nconst items = $input.all();\nconst returnData = [];\n\nfunction fnv1aHash(str) {\n  let hash = 0x811c9dc5;\n  for (let i = 0; i < str.length; i++) {\n    hash ^= str.charCodeAt(i);\n    hash = Math.imul(hash, 0x01000193);\n  }\n  return (hash >>> 0).toString(16);\n}\n\nfor (const item of items) {\n  const callbackData = item.json.callback_data || item.json.body?.callback_query?.data || item.json.callback_query?.data || '';\n  \n  if (!callbackData.startsWith('SIGN_LOAN|')) {\n    returnData.push(item);\n    continue;\n  }\n\n  const parts = callbackData.split('|');\n  const base64Payload = parts[1];\n  const signature = parts[2];\n\n  if (!base64Payload || !signature) {\n    item.json.security_stop = true;\n    item.json.error = 'Missing signature payload';\n    returnData.push(item);\n    continue;\n  }\n\n  if (fnv1aHash(base64Payload) !== signature) {\n    item.json.security_stop = true;\n    item.json.error = 'Signature tampering detected';\n    returnData.push(item);\n    continue;\n  }\n\n  // Decode stateless context\n  const payloadStr = Buffer.from(base64Payload, 'base64').toString('utf8');\n  const context = JSON.parse(payloadStr);\n\n  // Rehydrate ticket\n  const ticket = item.json.canonical_ticket || {};\n  if (!ticket.routing_decision) ticket.routing_decision = {};\n  ticket.routing_decision.route = 'LOAN_ORIGINATION';\n  \n  ticket.trace_id = context.trace_id;\n  ticket.transaction_amount = context.amount;\n  ticket.customer_id = context.customer_id; // Context safely injected!\n  \n  item.json.canonical_ticket = ticket;\n  item.json.status = 'EXECUTE_LOAN';\n  returnData.push(item);\n}\n\nreturn returnData;"
+      },
+      "id": "cbf46807-c0dd-4e05-bfd8-63b70adf82f8",
+      "name": "Block 5.0: Loan Signature Catcher",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        256,
+        2256
+      ]
+    },
+    {
+      "parameters": {
+        "content": "# VLAN 40\n",
+        "height": 448,
+        "width": 848,
+        "color": "#0210CF"
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -48,
+        1984
+      ],
+      "id": "fb2738d6-33a5-4f27-bbf2-da49a4afd30a",
+      "name": "Sticky Note4"
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        16,
+        2064
+      ],
+      "id": "2824174c-53c5-469a-bd23-8a24dbe66b86",
+      "name": "VLAN_40_Trigger"
+    },
+    {
+      "parameters": {
+        "updates": [
+          "callback_query"
+        ],
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        32,
+        2256
+      ],
+      "id": "60f2e239-1c94-49d3-ac2c-b41430b0cadd",
+      "name": "SIGN_LOAN",
+      "webhookId": "c17d6c55-1610-456c-878d-b6365aebeb88",
+      "credentials": {
+        "telegramApi": {
+          "id": "8BF8bS16xigtA8fS",
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Block 4.5: Credit Eligibility Scorer (Mock Data Injector)": {
+      "main": [
+        [
+          {
+            "node": "Block 4.6: Credit Decision Engine (Strict Threshold Routing)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Block 4.6: Credit Decision Engine (Strict Threshold Routing)": {
+      "main": [
+        [
+          {
+            "node": "Block 4.7: e-Signature Dispatcher (Stateless Tokenization)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Block 5.0: Loan Signature Catcher": {
+      "main": [
+        [
+          {
+            "node": "Block 5.1: Credit Disbursement Trigger (Core Banking Payload)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VLAN_40_Trigger": {
+      "main": [
+        [
+          {
+            "node": "Block 4.5: Credit Eligibility Scorer (Mock Data Injector)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SIGN_LOAN": {
+      "main": [
+        [
+          {
+            "node": "Block 5.0: Loan Signature Catcher",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "4f14f7ac18668138c414d2238e63ec58a8710810d54692bc8249b8c7e0dbb820"
+  }
+}

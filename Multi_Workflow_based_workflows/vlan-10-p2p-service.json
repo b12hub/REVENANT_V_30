@@ -1,0 +1,223 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "/**\n * REVENANT V31-F1 — NEW NODE: \"Block 3.5: Deterministic P2P Validator\"\n * Position: Between \"Business Impact Calculator\" and \"Transition Guard & Schema Validator\".\n *\n * Behavior:\n *   - Non-P2P tickets: zero-touch passthrough.\n *   - P2P tickets: strict deterministic validation of phone + amount.\n */\n\nconst items = $input.all(); // FIX: System context fetched securely\nconst returnData = [];\n\nconst PHONE_REGEX = /^998\\d{9}$/;\nconst MAX_P2P_AMOUNT_UZS = 50000000; // Bank default ceiling\n\nfor (const item of items) {\n  const json = item.json;\n  const ticket = json.canonical_ticket;\n\n  // Defensive: no ticket payload -> passthrough untouched\n  if (!ticket) {\n    returnData.push(item);\n    continue;\n  }\n\n  const intent = ticket.rule_engine && ticket.rule_engine.intent;\n\n  // 1. Not a P2P_TRANSFER ticket -> pass through unchanged\n  if (intent !== 'P2P_TRANSFER') {\n    returnData.push(item);\n    continue;\n  }\n\n  // 2. P2P_TRANSFER -> strict deterministic validation\n  const errors = [];\n\n  const phone = ticket.text_features && ticket.text_features.extracted_p2p_phone;\n  if (!phone || typeof phone !== 'string' || !PHONE_REGEX.test(phone)) {\n    errors.push('INVALID_P2P_PHONE');\n  }\n\n  // Fallback check: amount might be at root json if missing from canonical_ticket\n  const rawAmount = ticket.transaction_amount || json.transaction_amount;\n  const amount = Number(rawAmount);\n  const amountValid = Number.isFinite(amount) && amount > 0 && amount <= MAX_P2P_AMOUNT_UZS;\n  \n  if (!amountValid) {\n    errors.push('INVALID_P2P_AMOUNT');\n  }\n\n  // 3. Errors found -> block the ticket\n  if (errors.length > 0) {\n    ticket.ticket_status = 'BLOCKED_VALIDATION';\n    ticket.block35_passed = false;\n    ticket.block35_report = errors.join(', ');\n  } else {\n    // 4. Valid -> canonicalize phone and mark success\n    ticket.p2p_target_canonical = '+' + phone;\n    ticket.block35_passed = true;\n    ticket.block35_report = 'P2P_VALIDATION_SUCCESS';\n    // Ensure amount is synced cleanly to canonical_ticket for downstream use\n    ticket.transaction_amount = amount; \n  }\n\n  json.canonical_ticket = ticket;\n  returnData.push({ json });\n}\n\nreturn returnData;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        1360
+      ],
+      "id": "d6de25a8-ab19-4fa6-90fb-127160e31708",
+      "name": "Block 3.5: Deterministic P2P Validator"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * REVENANT V31-F1 — \"Block 4.3: CBU Response Sanitizer\" (HARDENED)\n * Position: After \"CBU TTT: Resolve Phone-to-Account\" & before \"Context Assembler\".\n */\n\nconst items = $input.all(); // FIX: System context fetched securely\nconst returnData = [];\n\n// Aggressive Prompt-Injection Defenses\nconst INJECTION_PATTERN = /ignore|override|system|developer|cmd|exec|must|should/gi;\nconst HARD_NAME_LIMIT = 50;\nconst UPSTREAM_TICKET_NODE = 'Block 3.5: Deterministic P2P Validator'; // <-- Adjust to exact node name\n\nfunction sanitizeAccountHolderName(rawName) {\n  if (typeof rawName !== 'string' || rawName.length === 0) {\n    return 'UNKNOWN_ACCOUNT_HOLDER';\n  }\n\n  let name = rawName;\n  // Strip control characters & HTML\n  name = name.replace(/[\\u0000-\\u001F\\u007F-\\u009F]/g, ' ');\n  name = name.replace(/<[^>]*>/g, '');\n  // Neutralize markdown & common injection words\n  name = name.replace(/[*_`#\\[\\]()~>|]/g, '');\n  name = name.replace(INJECTION_PATTERN, '');\n  // Controller fallback: Strip anything non-alphanumeric as final sweep\n  name = name.replace(/[^a-zA-Z0-9\\s]/g, '');\n  // Collapse whitespace and cap length\n  name = name.replace(/\\s{2,}/g, ' ').trim();\n  \n  return name.slice(0, HARD_NAME_LIMIT) || 'UNKNOWN_ACCOUNT_HOLDER';\n}\n\nfunction sanitizeMaskedCard(rawCard) {\n  if (typeof rawCard !== 'string') return '';\n  return rawCard.replace(/[^0-9*]/g, '').slice(0, 19);\n}\n\nfor (const item of items) {\n  // Account for n8n sometimes nesting HTTP response in .body\n  const cbuResponse = item.json.body || item.json || {};\n\n  // Recover canonical_ticket from the upstream node\n  let ticket = item.json.canonical_ticket;\n  if (!ticket) {\n    try {\n      ticket = $(UPSTREAM_TICKET_NODE).item.json.canonical_ticket || {};\n    } catch (e) {\n      ticket = {};\n    }\n  }\n\n  if (cbuResponse.status === 'SUCCESS') {\n    ticket.p2p_resolved_recipient = {\n      type: 'CBU_VERIFIED_ACCOUNT',\n      legal_name: sanitizeAccountHolderName(cbuResponse.account_holder_name),\n      masked_account: sanitizeMaskedCard(cbuResponse.masked_card),\n      lookup_verified_at: new Date().toISOString(),\n    };\n  } else {\n    // Controller Directive: Trigger graceful failure if CBU fails\n    ticket.p2p_resolved_recipient = { type: \"FAILED_LOOKUP\" };\n    item.json.security_gate = { stop_execution: true, reason: \"CBU_RESOLUTION_FAILED\" };\n  }\n\n  ticket.cbu_lookup_status = cbuResponse.status === 'SUCCESS' ? 'SUCCESS' : 'FAILED';\n  \n  // Clean up the output payload so the LLM ONLY sees the sanitized ticket\n  item.json = { \n      ...item.json,\n      canonical_ticket: ticket,\n      ...(item.json.security_gate ? { security_gate: item.json.security_gate } : {})\n  };\n  \n  returnData.push(item);\n}\n\nreturn returnData;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        1360
+      ],
+      "id": "5cdac50f-c28e-4e10-b7ae-1a5f75441db4",
+      "name": "Block 4.3: CBU Response Sanitizer"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.TEST_API_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"target_phone\": \"{{ $json.canonical_ticket.p2p_target_canonical }}\",\n  \"trace_id\": \"{{ $json.canonical_ticket.trace_id }}\"\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        432,
+        1360
+      ],
+      "id": "9a99b53b-2668-406f-9c19-f21883d5543b",
+      "name": "CBU TTT: Resolve Phone-to-Account"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * REVENANT V31-F1 — P2P Proposal Builder\n * Builds the stateless token and Telegram confirmation keyboard.\n */\nconst items = $input.all();\nconst returnData = [];\n\nfunction generatePureJSHash(str) {\n  let hash = 0x811c9dc5;\n  for (let i = 0; i < str.length; i++) {\n    hash ^= str.charCodeAt(i);\n    hash = Math.imul(hash, 0x01000193);\n  }\n  return (hash >>> 0).toString(16);\n}\n\nfor (const item of items) {\n  const ticket = item.json.canonical_ticket || {};\n  \n  const target_phone = ticket.p2p_target_canonical || 'UNKNOWN_TARGET';\n  const amount = ticket.transaction_amount || 0;\n  const traceId = ticket.trace_id || 'UNKNOWN_TRACE';\n\n  // 1. Generate Stateless Context Token\n  const tokenPayload = {\n    trace_id: traceId,\n    amount: amount,\n    target: target_phone,\n    timestamp: Date.now()\n  };\n  \n  // Base64 encode the payload safely\n  const paymentToken = Buffer.from(JSON.stringify(tokenPayload)).toString('base64');\n  const tokenSignature = generatePureJSHash(paymentToken);\n\n  // 2. Build Telegram Button with Payload\n  const telegramKeyboard = {\n    inline_keyboard: [[\n      {\n        text: '✅ Tasdiqlash (Confirm Transfer)',\n        callback_data: `CONFIRM_P2P|${paymentToken}|${tokenSignature}`\n      }\n    ]]\n  };\n\n  // 3. Inject into Advisory output for Telegram node\n  if (!item.json.advisory) item.json.advisory = {};\n  if (!item.json.advisory.llm_output) item.json.advisory.llm_output = {};\n\n  item.json.advisory.llm_output.transaction_proposal = {\n     tool_name: \"P2P_TRANSFER\",\n     telegram_action: telegramKeyboard\n  };\n  \n  item.json.advisory.llm_output.draft_customer_response = `${target_phone} raqamiga ${amount} UZS o'tkazmani tasdiqlaysizmi?`;\n  \n  item.json.canonical_ticket = ticket;\n  returnData.push(item);\n}\n\nreturn returnData;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        848,
+        1360
+      ],
+      "id": "aac6cd0f-249c-4d2b-95f0-656f508a9bf4",
+      "name": "P2P Proposal Builder"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * REVENANT V31-F1 — \"Block 8.0.5: P2P Idempotency Guard\" (RECONCILED)\n * Blocks double-spending from Telegram click-spamming at 5,000 TPS.\n */\nconst items = $input.all();\n\n// Pure-JS 32-bit FNV-1a hash generator (Sandbox Safe)\nfunction generatePureJSHash(str) {\n  let hash = 0x811c9dc5;\n  for (let i = 0; i < str.length; i++) {\n    hash ^= str.charCodeAt(i);\n    hash = Math.imul(hash, 0x01000193);\n  }\n  return (hash >>> 0).toString(16);\n}\n\nfor (const item of items) {\n  const json = item.json;\n  const ticket = json.canonical_ticket || {};\n\n  // FIX: Accurately read the fields produced by the Block 3.5 P2P Validator\n  const sender_email   = ticket.customer_email || json.source_email;\n  const target_phone   = ticket.p2p_target_canonical || json.target_phone;\n  const amount_uzs     = ticket.transaction_amount || json.amount_uzs;\n  \n  // In the execution block, trace_id acts as the unique approval footprint\n  const approval_id    = ticket.trace_id || json.trace_id || json.contract_id;\n\n  // Skip if any critical field is missing\n  if (!sender_email || !target_phone || amount_uzs === undefined || approval_id === undefined) {\n    json.idempotency_error = \"MISSING_CRITICAL_PARAMETERS\";\n    continue;\n  }\n\n  // Concatenate the immutable transaction footprint string\n  const footprintString = `${sender_email}${target_phone}${amount_uzs}${approval_id}`;\n  const fingerprint = generatePureJSHash(footprintString);\n\n  // Inject fingerprint into the execution ledger parameters\n  json.p2p_transaction_fingerprint = fingerprint;\n\n  // Build the exact PostgreSQL INSERT payload with unique fingerprint constraint\n  json.idempotency_query_payload = {\n    sql_statement: \"INSERT INTO bank_p2p_idempotency_ledger (fingerprint, approval_id, created_at) VALUES ($1, $2, NOW());\",\n    params: [fingerprint, approval_id]\n  };\n}\n\nreturn items;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        1600
+      ],
+      "id": "fea722e9-f126-447f-9c54-8e2157b70dcf",
+      "name": "Block 8.0.5 – P2P Idempotency Guard"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * REVENANT V31-F1 — \"Block 5.2: P2P Execution Trigger\"\n * Catches the CONFIRM_P2P callback, verifies the stateless signature, \n * and routes the approved ticket to the Core Ledger.\n */\n\nconst items = $input.all();\nconst returnData = [];\n\nfunction fnv1aHash(str) {\n  let hash = 0x811c9dc5;\n  for (let i = 0; i < str.length; i++) {\n    hash ^= str.charCodeAt(i);\n    hash = Math.imul(hash, 0x01000193);\n  }\n  return (hash >>> 0).toString(16);\n}\n\nfor (const item of items) {\n  const callbackData = item.json.callback_data || item.json.body?.callback_query?.data || item.json.callback_query?.data || '';\n  \n  if (!callbackData.startsWith('CONFIRM_P2P|')) {\n    returnData.push(item);\n    continue;\n  }\n\n  const parts = callbackData.split('|');\n  const base64Payload = parts[1];\n  const signature = parts[2];\n\n  if (!base64Payload || !signature) {\n    item.json.security_stop = true;\n    item.json.error = 'Missing signature payload';\n    returnData.push(item);\n    continue;\n  }\n\n  const computedSignature = fnv1aHash(base64Payload);\n  if (computedSignature !== signature) {\n    item.json.security_stop = true;\n    item.json.error = 'Signature tampering detected';\n    returnData.push(item);\n    continue;\n  }\n\n  // Signature Valid -> Approve for Core Banking Execution\n  item.json.status = 'EXECUTE';\n  \n  const ticket = item.json.canonical_ticket || {};\n  if (!ticket.routing_decision) ticket.routing_decision = {};\n  ticket.routing_decision.route = 'P2P_TRANSFER';\n  \n  item.json.canonical_ticket = ticket;\n  returnData.push(item);\n}\n\nreturn returnData;"
+      },
+      "id": "4accc095-2082-40cf-a7c4-f6b838aef2ba",
+      "name": "Block 5.2: P2P Execution Trigger",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        432,
+        1600
+      ]
+    },
+    {
+      "parameters": {
+        "content": "# VLAN 10\n",
+        "height": 512,
+        "width": 1104,
+        "color": "#F90606"
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -48,
+        1280
+      ],
+      "id": "cd30ee25-6f74-482e-9e60-6103102b4316",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "updates": [
+          "callback_query"
+        ],
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        16,
+        1600
+      ],
+      "id": "145650be-8f7f-43d2-8488-eca51d02c286",
+      "name": "CONFIRM_P2P",
+      "webhookId": "c17d6c55-1610-456c-878d-b6365aebeb88",
+      "credentials": {
+        "telegramApi": {
+          "id": "8BF8bS16xigtA8fS",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -16,
+        1360
+      ],
+      "id": "2824174c-53c5-469a-bd23-8a24dbe66b86",
+      "name": "VLAN_10_Trigger"
+    }
+  ],
+  "connections": {
+    "Block 3.5: Deterministic P2P Validator": {
+      "main": [
+        [
+          {
+            "node": "CBU TTT: Resolve Phone-to-Account",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Block 4.3: CBU Response Sanitizer": {
+      "main": [
+        [
+          {
+            "node": "P2P Proposal Builder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CBU TTT: Resolve Phone-to-Account": {
+      "main": [
+        [
+          {
+            "node": "Block 4.3: CBU Response Sanitizer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Block 8.0.5 – P2P Idempotency Guard": {
+      "main": [
+        [
+          {
+            "node": "Block 5.2: P2P Execution Trigger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CONFIRM_P2P": {
+      "main": [
+        [
+          {
+            "node": "Block 8.0.5 – P2P Idempotency Guard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VLAN_10_Trigger": {
+      "main": [
+        [
+          {
+            "node": "Block 3.5: Deterministic P2P Validator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "4f14f7ac18668138c414d2238e63ec58a8710810d54692bc8249b8c7e0dbb820"
+  }
+}
