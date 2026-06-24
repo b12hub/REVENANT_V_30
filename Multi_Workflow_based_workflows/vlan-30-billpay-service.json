@@ -1,0 +1,163 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "/**\n * REVENANT V31-F2 — \"Block 9.5: Registry Lookup & Payload Builder\" (TIER 2)\n * Upgraded to include Tax/Mobile providers and Vault-sourced secrets.\n */\n\nconst items = $input.all();\nconst returnData = [];\n\n// ---------------------------------------------------------------------------\n// MOCK PROVIDER REGISTRY (Vault-Sourced)\n// ---------------------------------------------------------------------------\nconst REGISTRY = {\n  UZBEKENERGO: {\n    endpoint: 'https://api.uzbekenergo.uz/v2/payments/accept',\n    method: 'POST',\n    auth_header_name: 'X-UZBEKENERGO-API-KEY',\n    auth_secret: $vars.VAULT_UZBEKENERGO_SECRET || 'fallback_uze_sk', // 🔒 Sourced from Vault\n    payload_map: [\n      { source_field: 'canonical_ticket.payment_request.account_number', target_field: 'pinfl_or_account' },\n      { source_field: 'canonical_ticket.payment_request.amount', target_field: 'amount_uzs' },\n      { source_field: 'canonical_ticket.trace_id', target_field: 'merchant_trace_id' },\n      { source_field: 'canonical_ticket.payment_request.idempotency_key', target_field: 'idempotency_token' },\n    ],\n  },\n  YHXBB_FINES: {\n    endpoint: 'https://api.yhxbb.gov.uz/v1/fines/pay',\n    method: 'POST',\n    auth_header_name: 'Authorization',\n    auth_secret: $vars.VAULT_YHXBB_SECRET || 'Bearer fallback_yhxbb_tok', // 🔒 Sourced from Vault\n    payload_map: [\n      { source_field: 'canonical_ticket.payment_request.protocol_number', target_field: 'resolution_id' },\n      { source_field: 'canonical_ticket.payment_request.amount', target_field: 'fine_amount' },\n      { source_field: 'canonical_ticket.trace_id', target_field: 'external_ref' },\n      { source_field: 'canonical_ticket.payment_request.idempotency_key', target_field: 'dedup_key' },\n    ],\n  },\n  // --- NEW TIER 2 PROVIDER: TAX & INN ---\n  TAX_INN: {\n    endpoint: 'https://api.soliq.uz/v1/payments/inn',\n    method: 'POST',\n    auth_header_name: 'X-API-KEY',\n    auth_secret: $vars.VAULT_SOLIQ_SECRET || 'fallback_tax_secret', // 🔒 Sourced from Vault\n    payload_map: [\n      { source_field: 'canonical_ticket.payment_request.inn_number', target_field: 'inn' },\n      { source_field: 'canonical_ticket.payment_request.amount', target_field: 'amount' },\n      { source_field: 'canonical_ticket.trace_id', target_field: 'trace_id' },\n      { source_field: 'canonical_ticket.payment_request.idempotency_key', target_field: 'idempotency_key' },\n    ],\n  },\n  // --- NEW TIER 2 PROVIDER: MOBILE TOP-UP ---\n  MOBILE_TOPUP: {\n    endpoint: 'https://api.paynet.uz/v3/mobile/charge',\n    method: 'POST',\n    auth_header_name: 'Authorization',\n    auth_secret: $vars.VAULT_PAYNET_SECRET || 'Bearer fallback_paynet_secret', // 🔒 Sourced from Vault\n    payload_map: [\n      { source_field: 'canonical_ticket.payment_request.phone_number', target_field: 'phone' },\n      { source_field: 'canonical_ticket.payment_request.amount', target_field: 'amount' },\n      { source_field: 'canonical_ticket.trace_id', target_field: 'transaction_id' },\n      { source_field: 'canonical_ticket.payment_request.idempotency_key', target_field: 'idempotency_key' },\n    ],\n  }\n};\n\nfunction getValueByPath(obj, path) {\n  if (!obj || !path) return undefined;\n  return path.split('.').reduce((acc, key) => (acc !== undefined && acc !== null ? acc[key] : undefined), obj);\n}\n\nfunction generatePureJSHash(str) {\n  let hash = 0x811c9dc5;\n  for (let i = 0; i < str.length; i++) {\n    hash ^= str.charCodeAt(i);\n    hash = Math.imul(hash, 0x01000193);\n  }\n  return (hash >>> 0).toString(16);\n}\n\nfor (const item of items) {\n  const ticket = item.json.canonical_ticket;\n\n  if (!ticket || !ticket.payment_request) {\n    item.json.block95_passed = false;\n    item.json.block95_report = 'MISSING_PAYMENT_REQUEST';\n    returnData.push(item);\n    continue;\n  }\n\n  const providerKey = ticket.payment_request.provider_key;\n  const providerConfig = REGISTRY[providerKey];\n\n  if (!providerConfig) {\n    ticket.ticket_status = 'BLOCKED_UNKNOWN_PROVIDER';\n    ticket.block95_passed = false;\n    ticket.block95_report = `UNKNOWN_PROVIDER_KEY: ${providerKey || 'undefined'}`;\n    item.json.canonical_ticket = ticket;\n    returnData.push(item);\n    continue;\n  }\n\n  const idempotencySeed = [\n    providerKey,\n    ticket.trace_id,\n    ticket.payment_request.account_number || ticket.payment_request.protocol_number || ticket.payment_request.inn_number || ticket.payment_request.phone_number || '',\n    ticket.payment_request.amount,\n  ].join('|');\n  ticket.payment_request.idempotency_key = `bp_${generatePureJSHash(idempotencySeed)}`;\n\n  const body = {};\n  for (const fieldMap of providerConfig.payload_map) {\n    body[fieldMap.target_field] = getValueByPath(item.json, fieldMap.source_field);\n  }\n\n  const dynamicHeaders = [\n    { name: providerConfig.auth_header_name, value: providerConfig.auth_secret },\n    { name: 'Content-Type', value: 'application/json' }\n  ];\n\n  item.json.http_request = {\n    endpoint: providerConfig.endpoint,\n    method: providerConfig.method,\n    body: body,\n    headers: dynamicHeaders \n  };\n\n  item.json.__contains_secure_headers = true;\n  ticket.block95_passed = true;\n  ticket.block95_report = 'REGISTRY_LOOKUP_SUCCESS';\n  item.json.canonical_ticket = ticket;\n\n  returnData.push(item);\n}\n\nreturn returnData;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        384
+      ],
+      "id": "a4cf8137-705a-4b76-8f5c-e0586af11a98",
+      "name": "Block 9.5: Registry Lookup & Payload Builder"
+    },
+    {
+      "parameters": {
+        "method": "={{ $json.http_request.method }}",
+        "url": "={{ $json.http_request.endpoint }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.http_request.body }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 10000
+        }
+      },
+      "id": "03e30499-8169-4eaa-9a7d-f70dd4df3ee9",
+      "name": "Block 9.5: Universal HTTP Executor",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        416,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * REVENANT V31-F2 — \"Block 9.7: Universal Response Mapper\" (TIER 2)\n * Extended to handle Tax and Mobile Top-Up response schemas.\n */\n\nconst items = $input.all();\nconst returnData = [];\n\n// ---------------------------------------------------------------------------\n// MOCK RESPONSE REGISTRY (Extended)\n// ---------------------------------------------------------------------------\nconst RESPONSE_REGISTRY = {\n  UZBEKENERGO: {\n    response_map: { transaction_id: 'payment_uuid', status: 'state', amount: 'amount_uzs' },\n    status_map: { COMPLETED: 'SUCCESS', FAILED: 'FAILED', PENDING: 'PENDING' },\n  },\n  YHXBB_FINES: {\n    response_map: { transaction_id: 'receipt_no', status: 'result', amount: 'fine_amount' },\n    status_map: { OK: 'SUCCESS', REJECTED: 'FAILED' },\n  },\n  TAX_INN: {\n    response_map: { transaction_id: 'tax_receipt_id', status: 'payment_status', amount: 'amount_paid' },\n    status_map: { PAID: 'SUCCESS', ERROR: 'FAILED', PROCESSING: 'PENDING' },\n  },\n  MOBILE_TOPUP: {\n    response_map: { transaction_id: 'paynet_ref', status: 'status', amount: 'credited_amount' },\n    status_map: { SUCCESS: 'SUCCESS', REJECTED: 'FAILED' },\n  }\n};\n\nconst UPSTREAM_TICKET_NODE = 'Block 9.5: Registry Lookup & Payload Builder';\n\nfunction getValueByPath(obj, path) {\n  if (!obj || !path) return undefined;\n  return path.split('.').reduce((acc, key) => (acc !== undefined && acc !== null ? acc[key] : undefined), obj);\n}\n\nfor (const item of items) {\n  const rawResponse = (item.json && item.json.body) || item.json || {};\n\n  let ticket = item.json && item.json.canonical_ticket;\n  if (!ticket) {\n    try {\n      ticket = $(UPSTREAM_TICKET_NODE).item.json.canonical_ticket || {};\n    } catch (e) {\n      ticket = {};\n    }\n  }\n\n  const providerKey = ticket.payment_request && ticket.payment_request.provider_key;\n  const mapConfig = RESPONSE_REGISTRY[providerKey];\n\n  let providerTransactionId = null;\n  let mappedStatus = 'UNKNOWN';\n  let confirmedAmount = (ticket.payment_request && ticket.payment_request.amount) ?? null;\n\n  if (mapConfig) {\n    providerTransactionId = getValueByPath(rawResponse, mapConfig.response_map.transaction_id) ?? null;\n    const rawStatus = getValueByPath(rawResponse, mapConfig.response_map.status);\n    mappedStatus = mapConfig.status_map[rawStatus] || 'UNKNOWN';\n\n    const responseAmount = getValueByPath(rawResponse, mapConfig.response_map.amount);\n    if (responseAmount !== undefined && responseAmount !== null) {\n      confirmedAmount = responseAmount;\n    }\n  }\n\n  const universalReceipt = {\n    trace_id: ticket.trace_id || item.json.trace_id || null,\n    idempotency_key: (ticket.payment_request && ticket.payment_request.idempotency_key) || null,\n    provider_key: providerKey || null,\n    provider_transaction_id: providerTransactionId,\n    status: mappedStatus,\n    amount: confirmedAmount,\n    timestamp: new Date().toISOString(),\n  };\n\n  ticket.universal_receipt = universalReceipt;\n  ticket.block97_passed = mappedStatus === 'SUCCESS';\n  ticket.block97_report = mapConfig ? `RESPONSE_MAPPED_${mappedStatus}` : 'UNKNOWN_PROVIDER_AT_RESPONSE_STAGE';\n\n  // CRITICAL SECURITY SCRUB\n  delete item.json.__secure_headers;\n  delete item.json.__contains_secure_headers;\n  delete item.json.provider_request;\n  delete item.json.http_request; \n\n  for (const key of Object.keys(item.json)) {\n    if (/secret|api[_-]?key|auth[_-]?token|password|bearer/i.test(key)) {\n      delete item.json[key];\n    }\n  }\n\n  item.json = {\n    canonical_ticket: ticket,\n    universal_receipt: universalReceipt,\n  };\n\n  returnData.push(item);\n}\n\nreturn returnData;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        608,
+        384
+      ],
+      "id": "534621ef-bcdd-40d0-b4b8-f66badc2e8db",
+      "name": "Block 9.5: Universal Response Mapper"
+    },
+    {
+      "parameters": {
+        "content": "# VLAN 30\n",
+        "height": 256,
+        "width": 832,
+        "color": "#E4FF5C"
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -32,
+        304
+      ],
+      "id": "008f3529-5502-4137-85e8-8a40213047b6",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        16,
+        384
+      ],
+      "id": "2824174c-53c5-469a-bd23-8a24dbe66b86",
+      "name": "VLAN_30_Trigger"
+    }
+  ],
+  "connections": {
+    "Block 9.5: Registry Lookup & Payload Builder": {
+      "main": [
+        [
+          {
+            "node": "Block 9.5: Universal HTTP Executor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Block 9.5: Universal HTTP Executor": {
+      "main": [
+        [
+          {
+            "node": "Block 9.5: Universal Response Mapper",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VLAN_20_Trigger": {
+      "main": [
+        [
+          {
+            "node": "Block 9.5: Registry Lookup & Payload Builder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "4f14f7ac18668138c414d2238e63ec58a8710810d54692bc8249b8c7e0dbb820"
+  }
+}

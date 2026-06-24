@@ -1,0 +1,73 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "chatId": "={{$vars.TELEGRAM_CHAT_ID}}",
+        "text": "=ℹ️ INQUIRY RESOLVED ℹ️\n\nTicket ID: {{ $json.contract_id || $json.canonical_ticket.trace_id }}\nRoute: {{ $json.canonical_ticket.routing_decision.route }}\n\nResponse:\n{{ $json.advisory.draft_customer_response || $json.message_to_user }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        192,
+        0
+      ],
+      "id": "5fc8d474-76f4-4f34-b3e1-c5f978620132",
+      "name": "BLOCK 9.4: FAQ / Informational Dispatch",
+      "webhookId": "faq-info-webhook",
+      "credentials": {
+        "telegramApi": {
+          "id": "8BF8bS16xigtA8fS",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "# VLAN 20\n",
+        "height": 224,
+        "width": 400,
+        "color": "#17EE42"
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -32,
+        -48
+      ],
+      "id": "197aabea-3261-4e84-9ed2-9e3a84310de7",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -32,
+        0
+      ],
+      "id": "2824174c-53c5-469a-bd23-8a24dbe66b86",
+      "name": "VLAN_20_Trigger"
+    }
+  ],
+  "connections": {
+    "VLAN_20_Trigger": {
+      "main": [
+        [
+          {
+            "node": "BLOCK 9.4: FAQ / Informational Dispatch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "4f14f7ac18668138c414d2238e63ec58a8710810d54692bc8249b8c7e0dbb820"
+  }
+}

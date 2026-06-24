@@ -1,0 +1,278 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "/**\n * REVENANT V31-F3 — \"Block 3.6: Merchant Verification Validator\" (TIER 3)\n * Position: After Intent Extraction (Text Feature Engineering).\n * Upgraded to use a single Vault-backed Merchant Registry.\n */\n\nconst items = $input.all();\nconst returnData = [];\n\n// ---------------------------------------------------------------------------\n// MERCHANT REGISTRY (Vault-Backed Consolidation)\n// ---------------------------------------------------------------------------\n// If Vault is missing, we fall back to the mock to prevent workflow crashes.\nconst fallbackRegistry = {\n  makro: { canonical_id: 'MKR123', status: 'ACTIVE', webhook_endpoint: 'https://pos.makro.uz/api/v1/revenant/notify' },\n  korzinka: { canonical_id: 'KRZ456', status: 'ACTIVE', webhook_endpoint: 'https://pos.korzinka.uz/webhooks/revenant' },\n  uzum_market: { canonical_id: 'UZM789', status: 'SUSPENDED', webhook_endpoint: 'https://pos.uzum.uz/webhooks/revenant' },\n};\n\nlet MERCHANT_REGISTRY;\ntry {\n  MERCHANT_REGISTRY = $vars.VAULT_MERCHANT_REGISTRY ? JSON.parse($vars.VAULT_MERCHANT_REGISTRY) : fallbackRegistry;\n} catch (e) {\n  MERCHANT_REGISTRY = fallbackRegistry;\n}\n\nfunction resolveMerchantAlias(ticket) {\n  const structured = ticket.merchant_checkout_request && ticket.merchant_checkout_request.merchant_alias;\n  if (structured) return String(structured).toLowerCase();\n\n  const text = `${ticket.subject || ''} ${ticket.body || ''}`.toLowerCase();\n  for (const alias of Object.keys(MERCHANT_REGISTRY)) {\n    if (text.includes(alias.replace('_', ' ')) || text.includes(alias)) {\n      return alias;\n    }\n  }\n  return null;\n}\n\nfor (const item of items) {\n  const ticket = item.json.canonical_ticket;\n\n  if (!ticket) {\n    returnData.push(item);\n    continue;\n  }\n\n  if (ticket.rule_based_intent !== 'MERCHANT_CHECKOUT') {\n    returnData.push(item);\n    continue;\n  }\n\n  const alias = resolveMerchantAlias(ticket);\n  const merchant = alias ? MERCHANT_REGISTRY[alias] : null;\n\n  const amount = Number(ticket.transaction_amount);\n  const amountValid = Number.isFinite(amount) && amount > 0;\n\n  if (!merchant || merchant.status !== 'ACTIVE' || !amountValid) {\n    const errors = [];\n    if (!alias || !merchant) errors.push('MERCHANT_NOT_FOUND');\n    else if (merchant.status !== 'ACTIVE') errors.push(`MERCHANT_${merchant.status}`);\n    if (!amountValid) errors.push('INVALID_CHECKOUT_AMOUNT');\n\n    ticket.ticket_status = 'BLOCKED_INVALID_MERCHANT';\n    ticket.block36_passed = false;\n    ticket.block36_report = errors.join(', ');\n    item.json.canonical_ticket = ticket;\n    returnData.push(item);\n    continue;\n  }\n\n  ticket.merchant_checkout = {\n    merchant_alias: alias,\n    merchant_id: merchant.canonical_id,\n    webhook_endpoint: merchant.webhook_endpoint,\n    amount_locked: amount,\n    locked_at: new Date().toISOString(),\n  };\n  ticket.block36_passed = true;\n  ticket.block36_report = 'MERCHANT_VERIFICATION_SUCCESS';\n\n  item.json.canonical_ticket = ticket;\n  returnData.push(item);\n}\n\nreturn returnData;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        256,
+        832
+      ],
+      "id": "a905a116-ac92-4c04-9184-f5156f7ee365",
+      "name": "Block 3.6: Merchant Verification Validator"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * REVENANT V31-F3 — Merchant Proposal Builder\n * Purpose: Formulates the checkout URL for QR Code generation\n */\nconst items = $input.all();\n\nfor (const item of items) {\n  const ticket = item.json.canonical_ticket || {};\n  const merchant = ticket.merchant_checkout || {};\n\n  // Extract variables safely\n  const amount = merchant.amount_locked || 0;\n  const merchantId = merchant.merchant_id || 'UNKNOWN';\n  const traceId = ticket.trace_id || 'UNKNOWN_TRACE';\n\n  // Build the dynamic checkout URL for the POS scanner\n  // This will feed directly into the next QR Code Generation node\n  item.json.qr_target_url = `https://checkout.revenant.bank.uz/pay?merchant=${merchantId}&amount=${amount}&trace=${traceId}`;\n\n  // Update the ticket state\n  ticket.proposal_status = 'PROPOSAL_BUILT';\n  ticket.proposal_timestamp = new Date().toISOString();\n  \n  item.json.canonical_ticket = ticket;\n}\n\nreturn items;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        464,
+        832
+      ],
+      "id": "11e35c7b-87cf-42aa-947f-5e5f3599729c",
+      "name": "Merchant Proposal Builder"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * REVENANT V31-F3 — \"Block 9.8: Merchant POS Notification Builder\" (TIER 3)\n * Position: After Core Ledger execution & before Post-Execution Forensic Signer.\n * Upgraded to use the unified Vault-backed Merchant Registry.\n */\n\nconst items = $input.all();\nconst returnData = [];\n\n// ---------------------------------------------------------------------------\n// MERCHANT REGISTRY (Vault-Backed Consolidation)\n// ---------------------------------------------------------------------------\nconst fallbackRegistry = {\n  MKR123: { webhook_endpoint: 'https://webhook.site/2af49de0-1bde-47dd-9283-b431c9afd463', shared_secret: 'mock_makro_whsec_9a31fe' },\n  KRZ456: { webhook_endpoint: 'https://pos.korzinka.uz/webhooks/revenant', shared_secret: 'mock_korzinka_whsec_c218bb' },\n  UZM789: { webhook_endpoint: 'https://pos.uzum.uz/webhooks/revenant', shared_secret: 'mock_uzum_whsec_77d4aa' },\n};\n\nlet MERCHANT_REGISTRY = fallbackRegistry;\ntry {\n  // Translate the unified Vault registry into a canonical_id keyed map for this node\n  if ($vars.VAULT_MERCHANT_REGISTRY) {\n     const parsed = JSON.parse($vars.VAULT_MERCHANT_REGISTRY);\n     MERCHANT_REGISTRY = {};\n     for (const key of Object.keys(parsed)) {\n         const m = parsed[key];\n         if (m.canonical_id) {\n             MERCHANT_REGISTRY[m.canonical_id] = {\n                 webhook_endpoint: m.webhook_endpoint,\n                 shared_secret: m.shared_secret || 'default_secret'\n             };\n         }\n     }\n  }\n} catch(e) {}\n\nfunction fnv1a(str) {\n  let hash = 0x811c9dc5;\n  for (let i = 0; i < str.length; i++) {\n    hash ^= str.charCodeAt(i);\n    hash = Math.imul(hash, 0x01000193);\n  }\n  return (hash >>> 0).toString(16);\n}\n\nfunction pureJsHmacSign(payloadString, secret) {\n  const inner = fnv1a(secret + payloadString);\n  const outer = fnv1a(secret + inner);\n  return outer;\n}\n\nfor (const item of items) {\n  const ticket = item.json.canonical_ticket;\n\n  if (!ticket || !ticket.merchant_checkout) {\n    returnData.push(item);\n    continue;\n  }\n\n  const merchantId = ticket.merchant_checkout.merchant_id;\n  const merchantConfig = MERCHANT_REGISTRY[merchantId];\n\n  if (!merchantConfig) {\n    ticket.block98_passed = false;\n    ticket.block98_report = `UNKNOWN_MERCHANT_ID_AT_NOTIFICATION_STAGE: ${merchantId || 'undefined'}`;\n    item.json.canonical_ticket = ticket;\n    returnData.push(item);\n    continue;\n  }\n\n  const notificationBody = {\n    trace_id: ticket.trace_id,\n    amount: ticket.merchant_checkout.amount_locked,\n    status: 'SUCCESS',\n    timestamp: new Date().toISOString(),\n  };\n\n  const signature = pureJsHmacSign(JSON.stringify(notificationBody), merchantConfig.shared_secret);\n\n  item.json.pos_webhook = {\n    url: merchantConfig.webhook_endpoint,\n    body: notificationBody,\n    signature: signature,\n  };\n\n  ticket.block98_passed = true;\n  ticket.block98_report = 'POS_NOTIFICATION_BUILT';\n\n  delete item.json.__secure_headers;\n  for (const key of Object.keys(item.json)) {\n    if (/secret|api[_-]?key|auth[_-]?token|password|bearer/i.test(key)) {\n      delete item.json[key];\n    }\n  }\n\n  item.json.canonical_ticket = ticket;\n  returnData.push(item);\n}\n\nreturn returnData;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        832
+      ],
+      "id": "d5cf1b52-156c-4bf1-afcc-dda7fbc24211",
+      "name": "Block 9.8: Merchant POS Notification Builder"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.pos_webhook.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Revenant-Signature",
+              "value": "={{ $json.pos_webhook.signature }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.pos_webhook.body }}",
+        "options": {
+          "redirect": {
+            "redirect": {}
+          },
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 8000
+        }
+      },
+      "id": "45d10a95-77c0-4989-80e9-a97abca0794b",
+      "name": "Block 9.9: Merchant POS Webhook Fire",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1328,
+        688
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "chatId": "={{$vars.TELEGRAM_CHAT_ID}}",
+        "text": "=✅ Money Sent! ✅ \n\nID : {{ $json.parsedBody.trace_id }}.\nSTATUS : {{ $json.parsedBody.status }}.\nAMOUNT : {{ $json.parsedBody.amount }}.\n",
+        "replyMarkup": "inlineKeyboard",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1328,
+        976
+      ],
+      "id": "a3031a31-39a2-4d2f-bee3-5c17dbf1fddd",
+      "name": "BLOCK 9: Success Notification Dispatch",
+      "webhookId": "5c6f8b80-c3a4-43a5-86fe-64a55d2b2ff7",
+      "credentials": {
+        "telegramApi": {
+          "id": "8BF8bS16xigtA8fS",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://api.qrserver.com/v1/create-qr-code/?size=250x250&data={{ encodeURIComponent($json.qr_target_url || \"https://revenant.bank.uz/blank\") }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "qr_code_image"
+            }
+          }
+        }
+      },
+      "id": "211a1628-6be6-4684-9ebc-ee0a2585d65a",
+      "name": "Block 4.4.1: Generate QR Code (F3)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        672,
+        832
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "a01cd19b-f81c-4870-a70a-180fb96e5cb9",
+              "leftValue": "={{ $json.canonical_ticket.routing_decision.route }}",
+              "rightValue": "MERCHANT_CHECKOUT",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1120,
+        832
+      ],
+      "id": "dd4ad630-00ee-473e-b25a-cf1a64ee411a",
+      "name": "Route_MERCHANT_CHECKOUT"
+    },
+    {
+      "parameters": {
+        "content": "# VLAN 50",
+        "height": 512,
+        "width": 1584,
+        "color": "#C4560E"
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -32,
+        656
+      ],
+      "id": "0f891a06-e5bd-4b8b-9a0e-9588f48027e1",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        32,
+        832
+      ],
+      "id": "2824174c-53c5-469a-bd23-8a24dbe66b86",
+      "name": "VLAN_50_Trigger"
+    }
+  ],
+  "connections": {
+    "Block 3.6: Merchant Verification Validator": {
+      "main": [
+        [
+          {
+            "node": "Merchant Proposal Builder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merchant Proposal Builder": {
+      "main": [
+        [
+          {
+            "node": "Block 4.4.1: Generate QR Code (F3)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Block 9.8: Merchant POS Notification Builder": {
+      "main": [
+        [
+          {
+            "node": "Route_MERCHANT_CHECKOUT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Block 9.9: Merchant POS Webhook Fire": {
+      "main": [
+        []
+      ]
+    },
+    "Block 4.4.1: Generate QR Code (F3)": {
+      "main": [
+        [
+          {
+            "node": "Block 9.8: Merchant POS Notification Builder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route_MERCHANT_CHECKOUT": {
+      "main": [
+        [
+          {
+            "node": "Block 9.9: Merchant POS Webhook Fire",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "BLOCK 9: Success Notification Dispatch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VLAN_20_Trigger": {
+      "main": [
+        [
+          {
+            "node": "Block 3.6: Merchant Verification Validator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "4f14f7ac18668138c414d2238e63ec58a8710810d54692bc8249b8c7e0dbb820"
+  }
+}
