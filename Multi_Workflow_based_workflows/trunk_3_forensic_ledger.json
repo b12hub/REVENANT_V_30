@@ -1,5 +1,4 @@
 {
-  "name": "REVNANT_V_32_Trunk_3",
   "nodes": [
     {
       "parameters": {
@@ -299,23 +298,6 @@
     },
     {
       "parameters": {
-        "httpMethod": "POST",
-        "path": "trunk-3",
-        "responseMode": "responseNode",
-        "options": {}
-      },
-      "id": "0046854f-64d8-4215-8657-174a5badac8d",
-      "name": "Webhook",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2.1,
-      "position": [
-        -352,
-        -144
-      ],
-      "webhookId": "8adeb186-0ddd-4005-9548-bd8ccde88f0e"
-    },
-    {
-      "parameters": {
         "options": {}
       },
       "id": "1773e846-d8e1-466e-ab3c-7272d0485f5e",
@@ -326,9 +308,21 @@
         3456,
         -144
       ]
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -368,
+        -144
+      ],
+      "id": "7685f708-849c-452d-a11e-ca0a323733a9",
+      "name": "When Executed by Another Workflow"
     }
   ],
-  "pinData": {},
   "connections": {
     "BLOCK 7.1: Trace Context Initializer": {
       "main": [
@@ -385,11 +379,33 @@
         ]
       ]
     },
+    "AWS KMS: Sign Forensic Payload": {
+      "main": [
+        [
+          {
+            "node": "SIEM: Stream to Splunk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "BLOCK 7.8: CBU Compliance Engine": {
       "main": [
         [
           {
             "node": "BLOCK 8.1: Execution Contract Builder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BLOCK 8.2: Execution Policy Firewall": {
+      "main": [
+        [
+          {
+            "node": "BLOCK 8.3: Human-in-the-Loop Gate",
             "type": "main",
             "index": 0
           }
@@ -429,17 +445,6 @@
         ]
       ]
     },
-    "AWS KMS: Sign Forensic Payload": {
-      "main": [
-        [
-          {
-            "node": "SIEM: Stream to Splunk",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "BLOCK 8.3: Human-in-the-Loop Gate": {
       "main": [
         [
@@ -462,11 +467,11 @@
         ]
       ]
     },
-    "BLOCK 8.2: Execution Policy Firewall": {
+    "Block 8.5: Training Sink": {
       "main": [
         [
           {
-            "node": "BLOCK 8.3: Human-in-the-Loop Gate",
+            "node": "Post-Execution Forensic Signer",
             "type": "main",
             "index": 0
           }
@@ -484,28 +489,6 @@
         ]
       ]
     },
-    "Block 8.5: Training Sink": {
-      "main": [
-        [
-          {
-            "node": "Post-Execution Forensic Signer",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Webhook": {
-      "main": [
-        [
-          {
-            "node": "BLOCK 7.1: Trace Context Initializer",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Post-Execution WORM Storage": {
       "main": [
         [
@@ -516,19 +499,21 @@
           }
         ]
       ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "BLOCK 7.1: Trace Context Initializer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
-  "active": false,
-  "settings": {
-    "executionOrder": "v1",
-    "binaryMode": "separate",
-    "availableInMCP": false
-  },
-  "versionId": "91e2c33c-d14d-4098-9c80-9ad450bd581a",
+  "pinData": {},
   "meta": {
     "instanceId": "4f14f7ac18668138c414d2238e63ec58a8710810d54692bc8249b8c7e0dbb820"
-  },
-  "nodeGroups": [],
-  "id": "HsyillZY3wMuI4Ds",
-  "tags": []
+  }
 }

@@ -1,23 +1,5 @@
 {
-  "name": "REVNANT_V_32_Trunk_1",
   "nodes": [
-    {
-      "parameters": {
-        "httpMethod": "POST",
-        "path": "trunk-1",
-        "responseMode": "responseNode",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2.1,
-      "position": [
-        0,
-        -32
-      ],
-      "id": "0518e249-1548-4a6b-ae56-356e25ab1ae6",
-      "name": "Webhook",
-      "webhookId": "11826970-c5dd-4f6c-b1d8-c7a0e5db7181"
-    },
     {
       "parameters": {
         "method": "POST",
@@ -210,9 +192,21 @@
         2016,
         -128
       ]
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        16,
+        -32
+      ],
+      "id": "bb6e8abf-979d-4ae3-8f7e-2704d0600a21",
+      "name": "When Executed by Another Workflow"
     }
   ],
-  "pinData": {},
   "connections": {
     "Vault: AppRole Login": {
       "main": [
@@ -236,28 +230,6 @@
         ]
       ]
     },
-    "Webhook": {
-      "main": [
-        [
-          {
-            "node": "Vault: AppRole Login",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "BLOCK 0: Titanium Sanitizer": {
-      "main": [
-        [
-          {
-            "node": "IF: AML Clean?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Configuration Loader - V30": {
       "main": [
         [
@@ -269,18 +241,11 @@
         ]
       ]
     },
-    "IF: Requires Screening & Safe?": {
+    "BLOCK 0: Titanium Sanitizer": {
       "main": [
         [
           {
-            "node": "HTTP: PEP/Sanctions API",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Respond: Blocked",
+            "node": "IF: AML Clean?",
             "type": "main",
             "index": 0
           }
@@ -305,11 +270,18 @@
         ]
       ]
     },
-    "Merge Success Paths": {
+    "IF: Requires Screening & Safe?": {
       "main": [
         [
           {
-            "node": "Respond: Success",
+            "node": "HTTP: PEP/Sanctions API",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond: Blocked",
             "type": "main",
             "index": 0
           }
@@ -326,19 +298,32 @@
           }
         ]
       ]
+    },
+    "Merge Success Paths": {
+      "main": [
+        [
+          {
+            "node": "Respond: Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Vault: AppRole Login",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
-  "active": false,
-  "settings": {
-    "executionOrder": "v1",
-    "binaryMode": "separate",
-    "availableInMCP": false
-  },
-  "versionId": "7f954e21-09a3-4830-9418-7c40da2e8cde",
+  "pinData": {},
   "meta": {
     "instanceId": "4f14f7ac18668138c414d2238e63ec58a8710810d54692bc8249b8c7e0dbb820"
-  },
-  "nodeGroups": [],
-  "id": "ef7zwuFsVrJ35HAk",
-  "tags": []
+  }
 }

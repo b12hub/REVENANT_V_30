@@ -628,23 +628,6 @@
     },
     {
       "parameters": {
-        "httpMethod": "POST",
-        "path": "trunk-2",
-        "responseMode": "responseNode",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2.1,
-      "position": [
-        -384,
-        -128
-      ],
-      "id": "bec51b08-fccf-46eb-80fe-17d39eedf307",
-      "name": "Webhook",
-      "webhookId": "60008025-a7b6-42cf-9239-76e0b2bb6b9b"
-    },
-    {
-      "parameters": {
         "respondWith": "json",
         "responseBody": "{\n  \"status\": \"SUCCESS\",\n  \"meta\": { \"trace_id\": \"{{ $json.trace_id }}\" },\n  \"result\": { \"advisory_package\": \"{{ $json.advisory_package }}\" }\n}",
         "options": {}
@@ -657,6 +640,19 @@
       ],
       "id": "c5249c1f-ca94-44d5-a48c-898c65fdc3e9",
       "name": "Respond: Universal Contract"
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -384,
+        -128
+      ],
+      "id": "f30c17bb-1693-4df5-a7cb-a3d340566705",
+      "name": "When Executed by Another Workflow"
     }
   ],
   "connections": {
@@ -991,7 +987,7 @@
         ]
       ]
     },
-    "Webhook": {
+    "When Executed by Another Workflow": {
       "main": [
         [
           {

@@ -1042,23 +1042,6 @@
     },
     {
       "parameters": {
-        "httpMethod": "POST",
-        "path": "approval-webhook",
-        "responseMode": "responseNode",
-        "options": {}
-      },
-      "id": "810b74bd-706b-46b7-9406-fc06320469c9",
-      "name": "Webhook",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2.1,
-      "position": [
-        -3824,
-        1136
-      ],
-      "webhookId": "bca25c81-8d8b-41ef-a226-1f681ddead98"
-    },
-    {
-      "parameters": {
         "resume": "webhook",
         "httpMethod": "POST",
         "limitWaitTime": true,
@@ -1075,6 +1058,19 @@
         1232
       ],
       "webhookId": "73fe6084-5dc3-43c4-bc3a-95a4ee45bdcd"
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -3808,
+        1136
+      ],
+      "id": "9115294f-8e63-4e84-bc90-4da61f0d2b68",
+      "name": "When Executed by Another Workflow"
     }
   ],
   "connections": {
@@ -1471,22 +1467,22 @@
         ]
       ]
     },
-    "Webhook": {
+    "Wait": {
       "main": [
         [
           {
-            "node": "Approval Eligibility Gate1",
+            "node": "Approval Logic",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Wait": {
+    "When Executed by Another Workflow": {
       "main": [
         [
           {
-            "node": "Approval Logic",
+            "node": "Approval Eligibility Gate1",
             "type": "main",
             "index": 0
           }
