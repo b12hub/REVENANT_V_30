@@ -1,0 +1,166 @@
+{
+  "name": "REVENANT V31 - SRE & MLOps Batch Jobs",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {}
+          ]
+        }
+      },
+      "id": "5fa5285d-6750-48cf-8056-2bf76c55edfe",
+      "name": "Daily at Midnight (Cron)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        112,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT embedding_vector, ground_truth FROM bank_audit_logs WHERE created_at >= NOW() - INTERVAL '24 HOURS';",
+        "options": {}
+      },
+      "id": "e5f7c113-06ff-42c9-8193-bd184b18f5e4",
+      "name": "Postgres: Fetch 24h Inferences",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        336,
+        208
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "YcdeCW9Ai0jkBLoE",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// MOCK: Wasserstein/PSI Drift Calculation\nconst records = $input.all();\n\n// Simulate advanced statistical drift math over the 24h dataset\nconst driftDetected = Math.random() > 0.8; // 20% chance of drift for simulation\nconst psiScore = driftDetected ? 0.25 : 0.05; // 0.2 is the threshold\n\nreturn [{\n  json: {\n    drift_detected: psiScore > 0.2,\n    psi_score: psiScore,\n    records_analyzed: records.length,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "ec7c0ed2-c4f6-418b-bc88-2c30ac81fd46",
+      "name": "Code: PSI/Wasserstein Drift Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.drift_detected }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "abe1b098-0149-455f-a18f-c21ffe07a1b8",
+      "name": "IF: Drift > 0.2?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        784,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.slack.com/webhook/mlops-alert",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"🚨 *MLOps Alert: Model Drift Detected* 🚨\\nPSI Score: {{ $json.psi_score }}\\nAction Required: Retrain Cross-Encoder model.\"\n}",
+        "options": {}
+      },
+      "id": "371c5f83-dab0-4f25-9f54-94bd68b2f2e7",
+      "name": "HTTP: SOC / MLOps Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1008,
+        208
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Daily at Midnight (Cron)": {
+      "main": [
+        [
+          {
+            "node": "Postgres: Fetch 24h Inferences",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres: Fetch 24h Inferences": {
+      "main": [
+        [
+          {
+            "node": "Code: PSI/Wasserstein Drift Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: PSI/Wasserstein Drift Check": {
+      "main": [
+        [
+          {
+            "node": "IF: Drift > 0.2?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Drift > 0.2?": {
+      "main": [
+        [
+          {
+            "node": "HTTP: SOC / MLOps Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "560070bc-be09-462a-af50-7dc424591383",
+  "meta": {
+    "instanceId": "4f14f7ac18668138c414d2238e63ec58a8710810d54692bc8249b8c7e0dbb820"
+  },
+  "nodeGroups": [],
+  "id": "JjAvf5oXsXS97mbh",
+  "tags": []
+}

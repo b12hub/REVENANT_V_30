@@ -1,0 +1,242 @@
+{
+  "name": "REVENANT V31 - F5 (Proactive Nudges)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        176,
+        64
+      ],
+      "id": "45172522-e42e-40f4-b49d-6a3e89695a09",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * REVENANT V31\n * F5 - Customer State Hydrator\n *\n * Mock implementation.\n * In production this node becomes a PostgreSQL/Supabase query.\n */\n\nconst tomorrow = new Date();\ntomorrow.setDate(tomorrow.getDate() + 1);\n\nconst threeDaysLater = new Date();\nthreeDaysLater.setDate(threeDaysLater.getDate() + 3);\n\nreturn [\n\n{\njson: {\n\ncustomer_id: \"CUST_001\",\n\ntelegram_chat_id: \"111111111\",\n\nfirst_name: \"Aziz\",\n\ncurrent_balance: 100000,\n\nupcoming_autopay: {\n\namount: 500000,\n\ndue_date: tomorrow.toISOString().split('T')[0],\n\nmerchant: \"Uzbekenergo\"\n\n},\n\nloan: null,\n\nidle_cash_days: 0\n\n}\n},\n\n{\njson: {\n\ncustomer_id: \"CUST_002\",\n\ntelegram_chat_id: \"222222222\",\n\nfirst_name: \"Dilshod\",\n\ncurrent_balance: 3200000,\n\nupcoming_autopay: null,\n\nloan: {\n\nloan_id: \"LN_88211\",\n\nremaining_balance: 900000,\n\nmaturity_date: threeDaysLater.toISOString().split('T')[0],\n\nrepayment_history: \"GOOD\"\n\n},\n\nidle_cash_days: 0\n\n}\n},\n\n{\njson: {\n\ncustomer_id: \"CUST_003\",\n\ntelegram_chat_id: \"333333333\",\n\nfirst_name: \"Madina\",\n\ncurrent_balance: 5000000,\n\nupcoming_autopay: null,\n\nloan: null,\n\nidle_cash_days: 30\n\n}\n}\n\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        384,
+        64
+      ],
+      "id": "321992b9-b4bb-4865-83ef-4f8614355db7",
+      "name": "Customer State Hydrator (Mock DB)"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * REVENANT V31\n * F5 - Deterministic Nudge Engine\n *\n * STRICTLY RULE-BASED\n */\n\nconst output = [];\n\nfor (const item of $input.all()) {\n\n    const customer = item.json;\n\n    /*\n    ------------------------------------------------------\n    RULE A\n    Low balance before autopay\n    ------------------------------------------------------\n    */\n\n    if (\n        customer.upcoming_autopay &&\n        customer.current_balance < customer.upcoming_autopay.amount\n    ) {\n\n        output.push({\n\n            json: {\n\n                ...customer,\n\n                nudge_intent: \"LOW_BALANCE_WARNING\",\n\n                context_payload: {\n\n                    balance: customer.current_balance,\n\n                    bill_amount: customer.upcoming_autopay.amount,\n\n                    due_date: customer.upcoming_autopay.due_date,\n\n                    merchant: customer.upcoming_autopay.merchant\n\n                }\n\n            }\n\n        });\n\n        continue;\n    }\n\n    /*\n    ------------------------------------------------------\n    RULE B\n    Loan renewal\n    ------------------------------------------------------\n    */\n\n    if (\n        customer.loan &&\n        customer.loan.repayment_history === \"GOOD\"\n    ) {\n\n        output.push({\n\n            json: {\n\n                ...customer,\n\n                nudge_intent: \"LOAN_RENEWAL\",\n\n                context_payload: {\n\n                    loan_id: customer.loan.loan_id,\n\n                    maturity_date: customer.loan.maturity_date,\n\n                    remaining_balance: customer.loan.remaining_balance\n\n                }\n\n            }\n\n        });\n\n        continue;\n    }\n\n    /*\n    ------------------------------------------------------\n    RULE C\n    Idle balance savings opportunity\n    ------------------------------------------------------\n    */\n\n    if (\n        customer.current_balance >= 5000000 &&\n        customer.idle_cash_days >= 30\n    ) {\n\n        output.push({\n\n            json: {\n\n                ...customer,\n\n                nudge_intent: \"SAVINGS_NUDGE\",\n\n                context_payload: {\n\n                    balance: customer.current_balance,\n\n                    idle_days: customer.idle_cash_days\n\n                }\n\n            }\n\n        });\n\n        continue;\n    }\n\n}\n\n/*\nNo trigger?\nNo message.\nNo spam.\n*/\n\nreturn output;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        592,
+        64
+      ],
+      "id": "32865547-1dbc-48be-aa42-a521170e11dc",
+      "name": "Deterministic Nudge Engine"
+    },
+    {
+      "parameters": {
+        "jsCode": "// =============================================================================\n// Node: Communication Consent & Frequency Cap Gate (Mock)\n// Location: Between Deterministic Nudge Engine and LLM Advisory Layer\n// Purpose: Enforce opt-in consent and 72‑hour frequency cap before sending nudges.\n//          Uses a deterministic mock of the \"user_preferences\" table.\n// =============================================================================\n\nconst items = $input.all();\nconst now = new Date();\nconst HOURS_72_MS = 72 * 60 * 60 * 1000;   // 72 hours in milliseconds\n\n// -------------------------------------------------------------------\n// Deterministic Mock Lookup (simulates Supabase \"user_preferences\")\n// -------------------------------------------------------------------\n// In production this would be replaced by an HTTP Request node to\n// Supabase or a direct database query.  Here we derive a pseudo‑random\n// but consistent result from the customer_id so that the same ID\n// always gets the same mock values.\nfunction getUserPreferences(customerId) {\n  // Simple character‑code sum for deterministic variation\n  let sum = 0;\n  for (let i = 0; i < customerId.length; i++) {\n    sum += customerId.charCodeAt(i);\n  }\n\n  // Consent: even sum → opt_in = true, odd → false\n  const opt_in_marketing = (sum % 2 === 0);\n\n  // last_nudge_timestamp: based on sum % 3\n  //   % 0 → 24 hours ago (fails rate limit)\n  //   % 1 → 100 hours ago (passes)\n  //   % 2 → 80 hours ago (passes)\n  let last_nudge_timestamp = null;\n  if (sum % 3 === 0) {\n    last_nudge_timestamp = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();\n  } else if (sum % 3 === 1) {\n    last_nudge_timestamp = new Date(now.getTime() - 100 * 60 * 60 * 1000).toISOString();\n  } else {\n    last_nudge_timestamp = new Date(now.getTime() - 80 * 60 * 60 * 1000).toISOString();\n  }\n\n  return { opt_in_marketing, last_nudge_timestamp };\n}\n\n// -------------------------------------------------------------------\n// Main processing loop\n// -------------------------------------------------------------------\nconst passedItems = [];\nconst droppedSummary = [];   // For internal logging only\n\nfor (const item of items) {\n  const data = item.json;\n\n  // ---------- Extract customer_id (flexible field naming) ----------\n  const customerId =\n    data.customer_id ||\n    data.customerId ||\n    (data.user && data.user.customer_id) ||\n    null;\n\n  // If we cannot determine a customer_id, drop as invalid\n  if (!customerId) {\n    data.nudge_gate_status = 'DROPPED_INVALID';\n    droppedSummary.push({ customer: 'UNKNOWN', reason: 'DROPPED_INVALID' });\n    console.warn('[Nudge Gate] Missing customer_id – item dropped');\n    continue;\n  }\n\n  // ---------- Simulated user preferences lookup ----------\n  const prefs = getUserPreferences(customerId);\n\n  // ---------- Gate 1: Consent ----------\n  if (!prefs.opt_in_marketing) {\n    data.nudge_gate_status = 'DROPPED_CONSENT';\n    droppedSummary.push({ customer: customerId, reason: 'DROPPED_CONSENT' });\n    console.log(`[Nudge Gate] Consent not granted for ${customerId}`);\n    continue;   // Drop item entirely\n  }\n\n  // ---------- Gate 2: Frequency Cap (72 hours) ----------\n  if (prefs.last_nudge_timestamp) {\n    const lastNudgeTime = new Date(prefs.last_nudge_timestamp).getTime();\n    const hoursSinceLastNudge = (now.getTime() - lastNudgeTime) / (60 * 60 * 1000);\n\n    if (hoursSinceLastNudge < 72) {\n      data.nudge_gate_status = 'DROPPED_RATE_LIMIT';\n      droppedSummary.push({\n        customer: customerId,\n        reason: 'DROPPED_RATE_LIMIT',\n        lastNudge: prefs.last_nudge_timestamp,\n        hoursAgo: hoursSinceLastNudge.toFixed(1)\n      });\n      console.log(`[Nudge Gate] Rate limit hit for ${customerId} (last nudge ${hoursSinceLastNudge.toFixed(1)}h ago)`);\n      continue;\n    }\n  }\n\n  // ---------- All gates passed ----------\n  data.nudge_gate_status = 'PASSED';\n  passedItems.push(item);\n}\n\n// -------------------------------------------------------------------\n// Log dropped items summary (visible in n8n execution output)\n// -------------------------------------------------------------------\nif (droppedSummary.length > 0) {\n  console.warn(`[Nudge Gate] Dropped ${droppedSummary.length} items:`, droppedSummary);\n} else {\n  console.log('[Nudge Gate] All items passed');\n}\n\n// Output only the items that passed both gates\nreturn passedItems;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        784,
+        64
+      ],
+      "id": "d11e42b0-ee8a-4e78-8e3d-d65b39c2db51",
+      "name": "Consent & Frequency Gate (DeepSeek)"
+    },
+    {
+      "parameters": {
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are REVENANT V31, an empathetic financial wellness assistant for a bank in Uzbekistan. You are NOT allowed to calculate money, invent products, make promises, or create financial advice outside the provided context_payload. You only perform natural-language personalization.  Rules:  Write in natural Uzbek.  Tone should feel supportive and caring, like a trusted financial partner.  Keep messages under 80 words.  Never sound robotic.  Never mention AI.  Never invent numbers or dates.  Use only values found inside context_payload.  Do not recommend products that are not implied by the nudge_intent.  Intent meanings: LOW_BALANCE_WARNING: Warn that an upcoming automatic payment may fail because balance is lower than the required amount. LOAN_RENEWAL: Congratulate the customer for good repayment history and gently remind them that the loan maturity date is approaching. SAVINGS_NUDGE: Suggest that idle money could be placed into a savings/deposit product.  Output only plain Telegram-ready Uzbek text."
+            },
+            {
+              "type": "HumanMessagePromptTemplate",
+              "message": "=You must click the Expression gear icon and paste the following exact expression. This takes the output from DeepSeek's Consent Gate and feeds it directly into the LLM.\n{{ 'Please generate the message for this customer. Nudge Intent: ' + $json.nudge_intent + ' | First Name: ' + $json.first_name + ' | Context Payload: ' + JSON.stringify($json.context_payload) }}"
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        992,
+        64
+      ],
+      "id": "2d89cb3b-3855-499c-aa4c-7cb06be591d8",
+      "name": "Basic LLM Chain"
+    },
+    {
+      "parameters": {
+        "jsCode": "// REVENANT V31-F5 — \"Outbound Dispatcher Builder\" (UPDATED: interactive inline keyboards)\n// Builds the Telegram Bot API JSON for outbound nudges. Context-aware\n// inline keyboards turn a read-only notification into a one-tap action;\n// the button's callback_data round-trips back to the main REVENANT webhook.\n//\n// CRITICAL: no require('crypto'), no external libraries, pure JS only.\n// Telegram callback_data has a hard 64-byte limit — guarded below.\n\nconst items = $input.all();\nconst returnData = [];\n\nfor (const item of items) {\n  const json = item.json;\n\n  const nudge_intent = json.nudge_intent;\n  const text = json.text;\n\n  // Identity + delivery target — adjust these field names if your upstream\n  // node carries them under different keys; this defends against a few\n  // likely shapes without assuming one rigidly.\n  const customer_id = json.customer_id || (json.canonical_ticket && json.canonical_ticket.customer_id) || null;\n  const chat_id = json.chat_id || json.telegram_chat_id || (json.canonical_ticket && json.canonical_ticket.telegram_chat_id) || null;\n\n  // Base payload — every nudge gets at least this, even with no button.\n  const telegram_payload = {\n    chat_id: chat_id,\n    text: text,\n    parse_mode: 'HTML',\n  };\n\n  let inlineButton = null;\n\n  // ---------------------------------------------------------------------\n  // Context-aware keyboard selection\n  // ---------------------------------------------------------------------\n  switch (nudge_intent) {\n    case 'LOW_BALANCE_WARNING':\n      inlineButton = {\n        text: \"💳 Hisobni to'ldirish (Top Up)\",\n        callback_data: `INTENT_TOPUP|${customer_id}`,\n      };\n      break;\n\n    case 'LOAN_RENEWAL':\n      inlineButton = {\n        text: '🔄 Qayta moliyalashtirish (Renew)',\n        callback_data: `INTENT_LOAN|${customer_id}`,\n      };\n      break;\n\n    case 'SAVINGS_NUDGE':\n      inlineButton = {\n        text: '💰 Omonat ochish (Open Deposit)',\n        callback_data: `INTENT_DEPOSIT|${customer_id}`,\n      };\n      break;\n\n    default:\n      // Unknown / purely informational nudge -> no button, unchanged behavior.\n      inlineButton = null;\n  }\n\n  // Fail safe rather than fail silent: don't ship an unusable button.\n  if (inlineButton) {\n    if (!customer_id) {\n      json.dispatcher_warning = `NO_CUSTOMER_ID_FOR_NUDGE: ${nudge_intent}`;\n      inlineButton = null;\n    } else if (inlineButton.callback_data.length > 64) {\n      json.dispatcher_warning = `CALLBACK_DATA_EXCEEDS_64_BYTES: ${nudge_intent}`;\n      inlineButton = null;\n    }\n  }\n\n  if (inlineButton) {\n    telegram_payload.reply_markup = {\n      inline_keyboard: [[inlineButton]],\n    };\n  }\n\n  json.telegram_payload = telegram_payload;\n  returnData.push(item);\n}\n\nreturn returnData;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        64
+      ],
+      "id": "c6081539-5b20-4dc7-9833-5c9ac5ef54b9",
+      "name": "Outbound Dispatcher Builder"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $vars.TELEGRAM_CHAT_ID }}",
+        "text": "={{ $json.telegram_payload }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1552,
+        64
+      ],
+      "id": "ac3bd777-e2bd-4c84-aca2-2d585a7c898b",
+      "name": "Send a text message",
+      "webhookId": "a4221a07-09c6-409c-b741-e5bcf1183d6c",
+      "credentials": {
+        "telegramApi": {
+          "id": "8BF8bS16xigtA8fS",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        992,
+        272
+      ],
+      "id": "b03698f9-c32b-4625-80f2-3820767ce868",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "LCurcVwcozoKXTGx",
+          "name": "n8n free OpenAI API credits"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Customer State Hydrator (Mock DB)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Customer State Hydrator (Mock DB)": {
+      "main": [
+        [
+          {
+            "node": "Deterministic Nudge Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deterministic Nudge Engine": {
+      "main": [
+        [
+          {
+            "node": "Consent & Frequency Gate (DeepSeek)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consent & Frequency Gate (DeepSeek)": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Outbound Dispatcher Builder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Outbound Dispatcher Builder": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "c2527f36-1031-4d99-a901-0f2d9c576dcb",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "4f14f7ac18668138c414d2238e63ec58a8710810d54692bc8249b8c7e0dbb820"
+  },
+  "nodeGroups": [],
+  "id": "BA9BdQBtgWSGXefx",
+  "tags": []
+}

@@ -1,0 +1,181 @@
+{
+  "name": "Regional",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "seconds"
+            }
+          ]
+        }
+      },
+      "id": "9ae667ae-c649-401f-80a1-addc3f009810",
+      "name": "CRON: Har 30 soniya",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "bucketName": "revenant-worm-audit-region-a",
+        "returnAll": true,
+        "options": {}
+      },
+      "id": "88c83939-a3bb-4d95-907d-7a58fd8a2265",
+      "name": "AWS S3: List Region A (Primary)",
+      "type": "n8n-nodes-base.awsS3",
+      "typeVersion": 1,
+      "position": [
+        256,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// NODE: Delta Filter (Oxirgi 30 soniyada o'zgargan fayllarni topish)\nconst items = $input.all();\nconst now = new Date().getTime();\nconst THIRTY_SECONDS_MS = 30000;\n\nconst newFiles = items.filter(item => {\n  const lastModified = new Date(item.json.LastModified).getTime();\n  // Faqat so'nggi 30-40 soniya ichida yozilgan fayllarni o'tkazamiz (ortiqcha trafik sarflamaslik uchun)\n  return (now - lastModified) <= (THIRTY_SECONDS_MS + 10000);\n});\n\nreturn newFiles;"
+      },
+      "id": "f5b0d1e5-1433-4327-af7b-017378550326",
+      "name": "CODE: Filter Delta Files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        512,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "bucketName": "revenant-worm-audit-region-a",
+        "fileKey": "={{ $json.key }}"
+      },
+      "id": "1d999f74-b3f1-4b7b-b4a0-1ba6f41c37e9",
+      "name": "AWS S3: Download Primary",
+      "type": "n8n-nodes-base.awsS3",
+      "typeVersion": 1,
+      "position": [
+        752,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "bucketName": "revenant-worm-audit-region-b",
+        "fileName": "={{ $json.Key }}",
+        "additionalFields": {}
+      },
+      "id": "5bf863f5-fde5-41fb-8401-a171478c4ab2",
+      "name": "AWS S3: Upload Region B (DR)",
+      "type": "n8n-nodes-base.awsS3",
+      "typeVersion": 1,
+      "position": [
+        1008,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5678/webhook-test/f860224a-492d-454b-b3dc-0970fa48ad3a",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Splunk {{$vars.SPLUNK_HEC_TOKEN}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"sourcetype\": \"_json\",\n  \"event\": {\n    \"alert_type\": \"DR_SYNC_SUCCESS\",\n    \"message\": \"Cross-Region Sync yakunlandi.\",\n    \"synced_files_count\": \"{{ $items().length }}\",\n    \"source\": \"Region A\",\n    \"destination\": \"Region B\"\n  }\n}",
+        "options": {}
+      },
+      "id": "a7a750c8-52a8-433a-b521-3fc4d6206ac3",
+      "name": "SIEM: Log Sync Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1264,
+        0
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "CRON: Har 30 soniya": {
+      "main": [
+        [
+          {
+            "node": "AWS S3: List Region A (Primary)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AWS S3: List Region A (Primary)": {
+      "main": [
+        [
+          {
+            "node": "CODE: Filter Delta Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CODE: Filter Delta Files": {
+      "main": [
+        [
+          {
+            "node": "AWS S3: Download Primary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AWS S3: Download Primary": {
+      "main": [
+        [
+          {
+            "node": "AWS S3: Upload Region B (DR)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AWS S3: Upload Region B (DR)": {
+      "main": [
+        [
+          {
+            "node": "SIEM: Log Sync Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "76850d55-3d5f-4e4b-b430-7659fa6b86e5",
+  "meta": {
+    "instanceId": "4f14f7ac18668138c414d2238e63ec58a8710810d54692bc8249b8c7e0dbb820"
+  },
+  "nodeGroups": [],
+  "id": "5dSw67gNfT7dZIJi",
+  "tags": []
+}

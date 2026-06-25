@@ -1,0 +1,149 @@
+{
+  "name": "k6_tester",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 2 * * *"
+            }
+          ]
+        }
+      },
+      "id": "994e495c-89bf-445d-9a90-782b4bb201c6",
+      "name": "CRON: Har kuni 02:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -752,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.k6.io/v3/tests/YOUR_TEST_ID/runs",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$vars.K6_API_TOKEN}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "1f431906-6db2-442f-9afb-47f9f86f7918",
+      "name": "HTTP: Trigger k6 Cloud (5000 TPS)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -496,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.status === 'created' || $json.status === 'queued' }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "e89ea308-6ba0-4da9-ac94-ae005c80e664",
+      "name": "IF: Test Boshlandimi?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -256,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5678/webhook-test/f860224a-492d-454b-b3dc-0970fa48ad3a",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Splunk {{$vars.SPLUNK_HEC_TOKEN}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"sourcetype\": \"_json\",\n  \"event\": {\n    \"alert_type\": \"CHAOS_ENGINEERING_START\",\n    \"message\": \"Xaos Muhandisligi boshlandi! Tizimga 5000 TPS yuklama berilmoqda.\",\n    \"test_run_id\": \"{{ $json.id }}\",\n    \"target_system\": \"Revenant V30 Region A\"\n  }\n}",
+        "options": {}
+      },
+      "id": "7c95e752-66f2-4f13-a709-c4ba68877ac5",
+      "name": "SIEM: Notify SOC",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        0,
+        0
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "CRON: Har kuni 02:00": {
+      "main": [
+        [
+          {
+            "node": "HTTP: Trigger k6 Cloud (5000 TPS)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP: Trigger k6 Cloud (5000 TPS)": {
+      "main": [
+        [
+          {
+            "node": "IF: Test Boshlandimi?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Test Boshlandimi?": {
+      "main": [
+        [
+          {
+            "node": "SIEM: Notify SOC",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "c2f572fa-9a79-46ea-8e3e-267e739f4807",
+  "meta": {
+    "instanceId": "4f14f7ac18668138c414d2238e63ec58a8710810d54692bc8249b8c7e0dbb820"
+  },
+  "nodeGroups": [],
+  "id": "ohsjKp8OYSy5jEYD",
+  "tags": []
+}
