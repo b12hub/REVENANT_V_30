@@ -65,7 +65,7 @@ Platformaning oylik texnik xarajatlari (COGS) bitta o'rtacha bank ijarachisi (te
 
 Quyidagi interaktiv simulyatordan foydalanib, oylik seanslar hajmini, inson resurslari xarajatlarini va litsenziya to'lovlarini o'zgartiring hamda olinadigan sof foyda, ROI va IP baholash ko'rsatkichlarini real vaqtda tahlil qiling.
 
-**📊 [Click here to open the Interactive REVENANT Economics Explorer](https://www.google.com/search?q=https://b12hub.github.io/REVENANT_V_30/revenant-calculator.html) to calculate real-time ROI, profit margins, and IP Valuation.**
+**📊 [Click here to open the Interactive REVENANT Economics Explorer](https://www.google.com/search?q=https://b12hub.github.io/revenant-calculator.html) to calculate real-time ROI, profit margins, and IP Valuation.**
 
 ## **4\. B2B Tijorat Paketlari va Narxlash Strategiyasi**
 
