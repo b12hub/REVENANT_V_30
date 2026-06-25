@@ -2,7 +2,7 @@
 
 **Boshqaruv Kengashi va Institutsional Investorlar Diqqatiga:**
 
-REVENANT v32 platformasi shunchaki n8n asosidagi avtomatlashtirish skriptlari to'plami emas. Bu — bankning an'anaviy monolith infratuzilmasini Go/Fastify mikroxizmatlariga va Temporal.io bardoshli holat mashinalariga (state machines) o'tkazuvchi, yuqori darajada himoyalangan, ko'p ijarachilik (multi-tenant) tizimidir. Mazkur hujjat bank faoliyatini raqamlashtirish orqali erishiladigan TCO, ROI va investitsion jozibadorlikning moliyaviy asoslarini taqdim etadi.
+REVENANT v32 platformasi shunchaki n8n asosidagi avtomatlashtirish skriptlari to'plami emas. Bu — bankning an'anaviy monolith infratuzilmasini Go/Fastify mikroxizmatlariga va Temporal.io bardoshl[...]
 
 ## **1\. Umumiy Egalik Qiymati (TCO) va Inson Resurslarini Almashtirish**
 
@@ -26,7 +26,7 @@ An'anaviy bank operatsiyalarining eng katta xarajatlaridan biri — bu doimiy is
 
 ## **2\. Oylik Texnik Xarajatlar Modeli (Hard COGS & Hosting Floor)**
 
-Platformaning oylik texnik xarajatlari (COGS) bitta o'rtacha bank ijarachisi (tenant) misolida, 2026-yilgi aktual bulutli infratuzilma va eng yaxshi neyrotarmoq (OpenAI GPT-4o mini, DeepSeek V4-Flash) tariflari asosida aniq hisoblangan.
+Platformaning oylik texnik xarajatlari (COGS) bitta o'rtacha bank ijarachisi (tenant) misolida, 2026-yilgi aktual bulutli infratuzilma va eng yaxshi neyrotarmoq (OpenAI GPT-4o mini, DeepSeek V4-Fl[...]
 
 ### **🛠️ Oylik Ish Hajmi Metrikasi (Workload Baseline)**
 
@@ -43,7 +43,7 @@ Platformaning oylik texnik xarajatlari (COGS) bitta o'rtacha bank ijarachisi (te
 1. **AI Neyrotarmoq API Xarajatlari:**  
    * **Suhbatdosh matn (Chat GPT-4o mini):** Toplam 75M input \+ 50M output token \= **$41.25/oy**. (DeepSeek V4-Flash modeliga o'tilganda bu xarajat $14.21 gacha tushishi mumkin).  
    * **Hujjatlar tahlili (Vision OCR):** 10,000 ta hujjat (har biri 1,000 in / 100 out token asosi bilan) \= **$2.10/oy**.  
-   * **Ovozli oqim (Streaming Voice Pipeline):** OpenAI Realtime-Whisper/Translate tariflari bilan (60,000 faol daqiqa uchun) \= **$3,060.00/oy**. *Ovozli qatlam butun API xarajatlarining 70% dan ortig'ini tashkil qiladi.*  
+   * **Ovozli oqim (Streaming Voice Pipeline):** OpenAI Realtime-Whisper/Translate tariflari bilan (60,000 faol daqiqa uchun) \= **$3,060.00/oy**. *Ovozli qatlam butun API xarajatlarining 70% dan [...]
 2. **Infratuzilma va Server Xarajatlari (Self-Hosted HA Footprint):**  
    * **GKE Autopilot Compute (20 vCPU \+ 52 GiB pod resurslari):** **$836.56/oy**.  
    * **GKE Klaster boshqaruv to'lovi:** **$73.00/oy**.  
@@ -57,15 +57,15 @@ Platformaning oylik texnik xarajatlari (COGS) bitta o'rtacha bank ijarachisi (te
 
 **Jami Oylik COGS Floor** \= $41.25 \+ $2.10 \+ $3,060.00 \+ $1,170.56 \= $4,273.91 / oy
 
-**Investorlar uchun Marja Ma'lumoti:** Platformaning bir oylik sof texnik xarajatlari atigi **\~$4.3K** ni tashkil etadi. Tizim bankka oylik **$45K** obuna (SaaS) modeli bilan sotilganda, biznes **90.5% Gross Profit Margin (Sof foyda marjasi)** bilan ishlaydi.
+**Investorlar uchun Marja Ma'lumoti:** Platformaning bir oylik sof texnik xarajatlari atiga **\~$4.3K** ni tashkil etadi. Tizim bankka oylik **$45K** obuna (SaaS) modeli bilan sotilganda, biznes *[...]
 
 ## 
 
 ## **3\. INTERAKTIV KORPORATIV IQTISODIYOT KALKULYATORI**
 
-Quyidagi interaktiv simulyatordan foydalanib, oylik seanslar hajmini, inson resurslari xarajatlarini va litsenziya to'lovlarini o'zgartiring hamda olinadigan sof foyda, ROI va IP baholash ko'rsatkichlarini real vaqtda tahlil qiling.
+Quyidagi interaktiv simulyatordan foydalanib, oylik seanslar hajmini, inson resurslari xarajatlarini va litsenziya to'lovlarini o'zgartiring hamda olinadigan sof foyda, ROI va IP baholash ko'rsatk[...]
 
-**📊 [Click here to open the Interactive REVENANT Economics Explorer](https://www.google.com/search?q=https://b12hub.github.io/revenant-calculator.html) to calculate real-time ROI, profit margins, and IP Valuation.**
+**📊 [Click here to open the Interactive REVENANT Economics Explorer](https://b12hub.github.io/REVENANT_V_30/revenant-calculator.html)** — Real-time kalkulyator orqali ROI, foydaning hajmi, payback davri va IP baholanishini interaktiv ravishda hisoblang.
 
 ## **4\. B2B Tijorat Paketlari va Narxlash Strategiyasi**
 
@@ -103,5 +103,5 @@ Agar yirik moliya xoldingi REVENANT dasturiy ta'minotini raqobatchilardan uzoqro
 
    * Bitta bankka qilingan hujum barcha banklarni avtomatik himoyalaydi. Hech bir bank buni yolg'iz o'zi qura olmaydi.
 
-Ushbu tarmoq effekti platformani bloklab qo'yuvchi aktivga aylantiradi. Shu sababli, IP ni to'liq sotib olish bo'yicha strategik baho bugungi kunda **$8,000,000 — $15,000,000** oralig'ida baholanadi. Tarmoqqa ikkinchi yoki uchinchi bank qo'shilgach, bu raqam **$20M+** dan oshadi.
+Ushbu tarmoq effekti platformani bloklab qo'yuvchi aktivga aylantiradi. Shu sababli, IP ni to'liq sotib olish bo'yicha strategik baho bugungi kunda **$8,000,000 — $15,000,000** oralig'ida bahol[...]
 
