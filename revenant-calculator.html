@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>REVENANT v32 | Enterprise Economics Explorer</title>
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --panel-bg: #111827;
+            --panel-border: #1f2937;
+            --neon-blue: #00f3ff;
+            --cyber-green: #00ff66;
+            --text-main: #e5e7eb;
+            --text-muted: #9ca3af;
+            --font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: var(--font-family);
+            margin: 0;
+            padding: 2rem;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            max-width: 1200px;
+            width: 100%;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+
+        .header h1 {
+            color: var(--neon-blue);
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-shadow: 0 0 15px rgba(0, 243, 255, 0.3);
+        }
+
+        .header p {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+
+        .panel {
+            background-color: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        .panel h2 {
+            margin-top: 0;
+            color: var(--text-main);
+            border-bottom: 1px solid var(--panel-border);
+            padding-bottom: 1rem;
+            margin-bottom: 1.5rem;
+            font-size: 1.2rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .input-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+
+        .range-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        input[type="range"] {
+            flex-grow: 1;
+            accent-color: var(--neon-blue);
+        }
+
+        input[type="number"] {
+            background-color: #1f2937;
+            border: 1px solid #374151;
+            color: var(--neon-blue);
+            padding: 0.5rem;
+            border-radius: 6px;
+            width: 120px;
+            font-family: monospace;
+            font-size: 1rem;
+            font-weight: bold;
+        }
+
+        input[type="number"]:focus {
+            outline: none;
+            border-color: var(--neon-blue);
+            box-shadow: 0 0 8px rgba(0, 243, 255, 0.2);
+        }
+
+        .result-card {
+            background-color: #1f2937;
+            border-left: 4px solid var(--neon-blue);
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+
+        .result-card.success {
+            border-left-color: var(--cyber-green);
+        }
+
+        .result-title {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 0.5rem;
+        }
+
+        .result-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--text-main);
+            font-family: monospace;
+        }
+
+        .result-card.success .result-value {
+            color: var(--cyber-green);
+            text-shadow: 0 0 10px rgba(0, 255, 102, 0.2);
+        }
+
+        .sub-text {
+            display: block;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 0.3rem;
+        }
+
+        @media (max-width: 900px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h1>REVENANT v32</h1>
+        <p>Enterprise Economics & Valuation Engine</p>
+    </div>
+
+    <div class="dashboard">
+        <!-- LEFT PANEL: INPUTS -->
+        <div class="panel">
+            <h2>Operational Baseline & Pricing</h2>
+            
+            <div class="input-group">
+                <label>Monthly Chat Sessions (Text/Bot)</label>
+                <div class="range-wrapper">
+                    <input type="range" id="chatSlider" min="10000" max="500000" step="10000" value="100000">
+                    <input type="number" id="chatInput" value="100000">
+                </div>
+            </div>
+
+            <div class="input-group">
+                <label>Monthly Voice IVR Minutes (ASR + TTS)</label>
+                <div class="range-wrapper">
+                    <input type="range" id="voiceSlider" min="5000" max="200000" step="5000" value="60000">
+                    <input type="number" id="voiceInput" value="60000">
+                </div>
+            </div>
+
+            <div class="input-group">
+                <label>Monthly Vision/OCR Documents</label>
+                <div class="range-wrapper">
+                    <input type="range" id="visionSlider" min="1000" max="50000" step="1000" value="10000">
+                    <input type="number" id="visionInput" value="10000">
+                </div>
+            </div>
+
+            <div class="input-group" style="margin-top: 2rem; border-top: 1px solid #1f2937; padding-top: 1.5rem;">
+                <label>Base Monthly License Fee (Bank pays you) - USD</label>
+                <div class="range-wrapper">
+                    <input type="range" id="licenseSlider" min="10000" max="150000" step="5000" value="45000">
+                    <input type="number" id="licenseInput" value="45000">
+                </div>
+            </div>
+
+            <div class="input-group">
+                <label>Upfront Implementation Fee - USD</label>
+                <div class="range-wrapper">
+                    <input type="range" id="implSlider" min="100000" max="3000000" step="50000" value="1250000">
+                    <input type="number" id="implInput" value="1250000">
+                </div>
+            </div>
+
+            <div class="input-group">
+                <label>Bank's Equivalent Human Call Center Cost - USD/Month</label>
+                <div class="range-wrapper">
+                    <input type="range" id="humanSlider" min="100000" max="3000000" step="50000" value="1230000">
+                    <input type="number" id="humanInput" value="1230000">
+                </div>
+            </div>
+        </div>
+
+        <!-- RIGHT PANEL: CALCULATIONS -->
+        <div class="panel">
+            <h2>Financial Metrics & Valuation</h2>
+
+            <div class="result-card">
+                <div class="result-title">Hard COGS Floor (Cost to Serve)</div>
+                <div class="result-value" id="valCogs">$0</div>
+                <span class="sub-text">Includes GPT-4o-mini, Realtime Voice APIs, and fixed K8s/Postgres/Kafka infra ($1,170).</span>
+            </div>
+
+            <div class="result-card success">
+                <div class="result-title">Gross Profit Margin</div>
+                <div class="result-value" id="valMargin">0%</div>
+                <span class="sub-text">Top-tier VC target is >80%.</span>
+            </div>
+
+            <div class="result-card success">
+                <div class="result-title">Bank ROI: Payback Period</div>
+                <div class="result-value" id="valPayback">0 Months</div>
+                <span class="sub-text">Time taken for the bank to recover the implementation fee via labor savings.</span>
+            </div>
+
+            <div class="result-card" style="border-left-color: #a855f7;">
+                <div class="result-title">Strategic IP Valuation (Market Value)</div>
+                <div class="result-value" id="valValuation">$0 - $0</div>
+                <span class="sub-text">Calculated at 10x to 15x forward ARR + $5M Cross-Bank Fraud Network Moat premium.</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Formatting currency
+    const formatCur = (num) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(num);
+    const formatDec = (num) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num);
+
+    // Sync Sliders and Inputs
+    function sync(sliderId, inputId) {
+        const slider = document.getElementById(sliderId);
+        const input = document.getElementById(inputId);
+        slider.addEventListener('input', () => { input.value = slider.value; calculate(); });
+        input.addEventListener('input', () => { slider.value = input.value; calculate(); });
+    }
+
+    sync('chatSlider', 'chatInput');
+    sync('voiceSlider', 'voiceInput');
+    sync('visionSlider', 'visionInput');
+    sync('licenseSlider', 'licenseInput');
+    sync('implSlider', 'implInput');
+    sync('humanSlider', 'humanInput');
+
+    function calculate() {
+        // Get Values
+        const chat = parseFloat(document.getElementById('chatInput').value) || 0;
+        const voice = parseFloat(document.getElementById('voiceInput').value) || 0;
+        const vision = parseFloat(document.getElementById('visionInput').value) || 0;
+        const license = parseFloat(document.getElementById('licenseInput').value) || 0;
+        const impl = parseFloat(document.getElementById('implInput').value) || 0;
+        const human = parseFloat(document.getElementById('humanInput').value) || 0;
+
+        // COGS Math
+        // Chat: 5 turns. 150 in, 100 out per turn. GPT-4o-mini rates: $0.15/1M in, $0.60/1M out
+        const chatCost = (chat * 5 * 150 / 1000000 * 0.15) + (chat * 5 * 100 / 1000000 * 0.60);
+        // Voice: $0.017 ASR + $0.034 Translate/TTS = $0.051 per minute
+        const voiceCost = voice * 0.051;
+        // Vision: 1000 in, 100 out per doc
+        const visionCost = vision * ((1000 / 1000000 * 0.15) + (100 / 1000000 * 0.60));
+        // Fixed Infra
+        const fixedInfra = 1170.56;
+
+        const totalCogs = chatCost + voiceCost + visionCost + fixedInfra;
+
+        // Margin Math
+        let margin = 0;
+        if (license > 0) {
+            margin = ((license - totalCogs) / license) * 100;
+        }
+
+        // Payback Math
+        const monthlySavings = human - license;
+        let payback = 0;
+        if (monthlySavings > 0) {
+            payback = impl / monthlySavings;
+        }
+
+        // Valuation Math
+        const arr = license * 12;
+        const valLow = arr * 10;
+        const valHigh = (arr * 15) + 5000000; // Includes $5M moat premium
+
+        // Update UI
+        document.getElementById('valCogs').innerText = formatDec(totalCogs) + " / mo";
+        document.getElementById('valMargin').innerText = margin.toFixed(1) + "%";
+        
+        const paybackEl = document.getElementById('valPayback');
+        if (monthlySavings > 0) {
+            paybackEl.innerText = payback.toFixed(2) + " Months";
+        } else {
+            paybackEl.innerText = "No Savings";
+        }
+
+        document.getElementById('valValuation').innerText = formatCur(valLow) + " - " + formatCur(valHigh);
+    }
+
+    // Run on load
+    calculate();
+</script>
+</body>
+</html>
