@@ -1,0 +1,39 @@
+// proto/credit.proto
+//
+// Deliberately covers ONLY the synchronous decision-engine outcome — not
+// every downstream async state (signature pending, disbursed, HITL
+// resolved). Those live in the Temporal workflow's Signal/Query surface,
+// the same boundary already established for VLAN 10: this RPC starts a
+// durable workflow and returns its immediate, synchronously-computable
+// verdict; it does not block on anything that requires a human or a
+// customer action.
+
+syntax = "proto3";
+
+package revenant.credit.v1;
+
+enum CreditDecisionStatus {
+  CREDIT_DECISION_STATUS_UNSPECIFIED = 0;
+  CREDIT_DECISION_STATUS_AUTO_APPROVE = 1;
+  CREDIT_DECISION_STATUS_AUTO_REJECT = 2;
+  CREDIT_DECISION_STATUS_REQUIRES_HITL = 3;
+}
+
+message CreditApplicationRequest {
+  string trace_id = 1;        // optional from the caller's view — proto3 empty-string handling in credit.schema.ts
+  string tenant_id = 2;
+  string customer_id = 3;     // REQUIRED — no placeholder fallback, see schema.ts
+  string customer_email = 4;  // bureau lookup key; may be empty (resolves to a fail-closed unknown profile, not a schema rejection)
+  int64 requested_amount_uzs = 5; // the ONE canonical amount field for this entire service — see activities.ts header
+}
+
+message CreditApplicationResponse {
+  string trace_id = 1;
+  string workflow_id = 2; // Signal/Query correlation handle, same pattern as VLAN 10
+  CreditDecisionStatus decision_status = 3;
+  string reason = 4; // joined threshold-trigger codes, e.g. "CREDIT_SCORE_BELOW_600"
+}
+
+service CreditService {
+  rpc SubmitApplication(CreditApplicationRequest) returns (CreditApplicationResponse);
+}
