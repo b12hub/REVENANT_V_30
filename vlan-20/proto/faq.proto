@@ -1,0 +1,64 @@
+// proto/faq.proto
+//
+// Field provenance, explicitly, since most of this contract is NOT derived
+// from the uploaded n8n export (see the conversational note above for why):
+//   - interaction_id, customer_id, query, language: requested field names,
+//     defined fresh for this service's actual job (answering a question),
+//     which the n8n file never did.
+//   - answer, status: requested field names; status's enum values are this
+//     service's own outcome taxonomy, not anything from the n8n file.
+//   - route: the ONE field with real provenance — it mirrors the old
+//     node's `canonical_ticket.routing_decision.route`, preserved because
+//     it's genuinely useful downstream context (which knowledge domain
+//     the answer came from), not because the new service computes routing
+//     itself.
+//   - tenant_id: not in the original request list, added because every
+//     other VLAN in this build (P2P, the Gateway) carries tenant_id through
+//     its envelope for multi-tenant isolation — omitting it here would be
+//     the one inconsistent contract in the whole platform.
+
+syntax = "proto3";
+
+package revenant.faq.v1;
+
+enum FAQStatus {
+  // proto3 enums require an explicit zero-value sentinel, not a reused
+  // first real value — same convention established in common.proto and
+  // p2p.proto, kept consistent here.
+  FAQ_STATUS_UNSPECIFIED = 0;
+  FAQ_STATUS_ANSWERED = 1;
+  FAQ_STATUS_NO_ANSWER_FOUND = 2;
+  // Returned when the AI Cognition Service is unreachable or exceeds its
+  // deadline. Deliberately a SUCCESSFUL response with this status, not a
+  // gRPC transport error — see server.ts for why graceful degradation beats
+  // propagating a bare timeout for this specific, anticipated case.
+  FAQ_STATUS_DEGRADED_FALLBACK = 3;
+}
+
+message FAQRequest {
+  // Optional by design — if the calling Gateway doesn't supply one, this
+  // service generates a fresh UUID server-side (see faq.schema.ts) rather
+  // than rejecting the request, the same tolerance the old node showed by
+  // falling back across two possible source fields instead of demanding one.
+  string interaction_id = 1;
+  string tenant_id = 2;
+  string customer_id = 3;
+  string query = 4;
+  // ISO 639-1 code (e.g. "uz", "ru", "en"). Optional — defaults applied in
+  // faq.schema.ts, since this stateless service has no language-detection
+  // logic of its own and shouldn't grow any.
+  string language = 5;
+}
+
+message FAQResponse {
+  string interaction_id = 1;
+  string answer = 2;
+  FAQStatus status = 3;
+  // Informational only — which knowledge domain/topic the AI Cognition
+  // Service routed this query to. Echoes the old node's "Route:" line.
+  string route = 4;
+}
+
+service FAQService {
+  rpc GetFAQAnswer(FAQRequest) returns (FAQResponse);
+}

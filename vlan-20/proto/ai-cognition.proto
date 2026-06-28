@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package revenant.aicognition.v1;
+
+message GenerateAdvisoryRequest {
+  string trace_id = 1;
+  string tenant_id = 2;
+  string customer_id = 3;
+  string query = 4;
+  string language = 5;
+}
+
+message GenerateAdvisoryResponse {
+  string answer = 1;
+  string route = 2;
+  double confidence = 3;
+}
+
+service AICognitionService {
+  rpc GenerateAdvisory(GenerateAdvisoryRequest) returns (GenerateAdvisoryResponse);
+}
