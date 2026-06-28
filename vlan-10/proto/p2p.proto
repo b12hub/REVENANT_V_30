@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package revenant.p2p.v1;
+
+import "common.proto"; 
+
+message P2PTransferRequest {
+  string phone = 1;
+  int64 amount_uzs = 2;
+  string raw_recipient_text = 3; 
+}
+
+enum P2PTransferStatus {
+  P2P_STATUS_UNSPECIFIED = 0; 
+  P2P_STATUS_SUCCESS = 1;
+  P2P_STATUS_DECLINED = 2;
+  P2P_STATUS_TIMED_OUT = 3;
+  P2P_STATUS_CALLBACK_VERIFICATION_FAILED = 4;
+  P2P_STATUS_IDEMPOTENCY_DUPLICATE = 5;
+  P2P_STATUS_RECIPIENT_RESOLUTION_FAILED = 6;
+  P2P_STATUS_EXECUTION_FAILED = 7;
+}
+
+message P2PTransferResult {
+  P2PTransferStatus status = 1;
+  string transaction_id = 2;
+  string recipient_account_masked = 3; 
+  string provider_reference = 4;
+  string error_detail = 5;
+}
+
+service P2PQueryService {
+  rpc GetTransferStatus(GetTransferStatusRequest) returns (P2PTransferResult);
+}
+
+message GetTransferStatusRequest {
+  string trace_id = 1;
+}
