@@ -1,0 +1,38 @@
+{
+  "name": "revenant",
+  "version": "1.0.0",
+  "description": "REVENANT V32 - API Gateway Edge Router",
+  "main": "dist/server.js",
+  "type": "executable",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "nodemon --exec ts-node src/server.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/b12hub/REVENANT_V_30.git"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "@grpc/grpc-js": "^1.10.9",
+    "@grpc/proto-loader": "^0.7.13",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.47.0",
+    "@opentelemetry/sdk-node": "^0.52.0",
+    "dotenv": "^16.4.5",
+    "fastify": "^4.28.1",
+    "ioredis": "^5.4.1",
+    "jose": "^5.6.3",
+    "pino": "^9.2.0",
+    "rate-limiter-flexible": "^5.0.3",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.9",
+    "nodemon": "^3.1.4",
+    "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
+    "typescript": "^5.5.2"
+  }
+}

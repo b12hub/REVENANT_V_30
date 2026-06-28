@@ -1,0 +1,93 @@
+// src/grpc/proto/common.proto
+//
+// Canonical internal envelope passed from VLAN 0 (API Gateway) to every
+// downstream domain service. This is the gRPC-enforced successor to the
+// "Immutable Envelope" contract from the pre-code-first roadmap — except
+// now the contract is unbreakable by construction, not just documented.
+
+syntax = "proto3";
+
+package revenant.common.v1;
+
+// Channel is the transport the original request arrived on. Mirrors the
+// Zod ChannelSchema in src/schemas/ingress.schema.ts — keep these two in
+// sync by hand until a shared codegen step exists to enforce it.
+//
+// proto3 enums MUST have a zero value, and convention dictates it be an
+// explicit "_UNSPECIFIED" sentinel rather than reusing the first real value
+// as the default. This lets a receiver distinguish "channel genuinely not
+// set" from "channel explicitly set to the first enum member" — collapsing
+// that distinction is a classic proto3 footgun.
+enum Channel {
+  CHANNEL_UNSPECIFIED = 0;
+  CHANNEL_TELEGRAM = 1;
+  CHANNEL_VOICE = 2;
+  CHANNEL_WEB = 3;
+  CHANNEL_API = 4;
+}
+
+// GatewayEnvelope is constructed ONLY after tenant resolution and intent
+// classification have already happened server-side in VLAN 0 — by the time
+// this message exists, tenant_id and intent are trusted, resolved values,
+// never raw client input. (Contrast with ingress.schema.ts, which validates
+// the pre-resolution caller payload and deliberately omits both fields.)
+message GatewayEnvelope {
+  // Schema versioning from message #1, not added later. Bumping this is the
+  // mechanism for evolving the contract without breaking already-deployed
+  // consumers mid-rollout.
+  string schema_version = 1;
+
+  string trace_id = 2;
+  string correlation_id = 3;
+
+  // Resolved server-side from authenticated routing context (API key /
+  // mTLS client cert → tenant lookup). Never derived from client input.
+  string tenant_id = 4;
+
+  string customer_id = 5;
+  string session_id = 6;
+  Channel channel = 7;
+
+  // Intent is a plain string, not a proto enum, by deliberate choice.
+  // Intent taxonomy grows continuously as new domain VLANs ship (P2P,
+  // Credit, Merchant, Bill-Pay, and whatever comes after) — proto enums are
+  // expensive to extend safely across already-deployed consumers, since an
+  // old binary that doesn't recognize a new enum value behaves differently
+  // across language runtimes. A string validated against a shared,
+  // independently-versioned TypeScript union type gets us compile-time
+  // safety on the producer/consumer side without coupling intent additions
+  // to a wire-format change.
+  string intent = 8;
+
+  // Raw JSON payload, intentionally a string rather than google.protobuf.Struct.
+  // Struct would be more strongly typed at the wire level, but it pulls in
+  // an extra well-known-type dependency for marginal benefit here, since the
+  // payload's actual shape is already validated upstream (ingress schema)
+  // and downstream (each VLAN's own typed contract) — this field is a
+  // pass-through, not a validation boundary.
+  string payload_json = 9;
+}
+
+// GatewayResult is the generic response envelope every VLAN service
+// returns from its Dispatch RPC. Mirrors GatewayEnvelope's pass-through
+// philosophy for result_json — the Gateway doesn't need to understand a
+// VLAN's domain-specific result shape, only relay it.
+message GatewayResult {
+  string trace_id = 1;
+  bool success = 2;
+
+  // Mirrors this project's established error-code taxonomy
+  // (VALIDATION_ERROR, PROVIDER_TIMEOUT, IDEMPOTENCY_DUPLICATE, etc.) —
+  // empty string when success is true.
+  string status_code = 3;
+
+  string result_json = 4;
+  string error_message = 5;
+}
+
+// Every domain VLAN implements this same interface — one generic RPC
+// shape the Gateway dispatches to identically regardless of which VLAN
+// it's calling, per the "generic dispatcher" requirement.
+service VlanService {
+  rpc Dispatch(GatewayEnvelope) returns (GatewayResult);
+}

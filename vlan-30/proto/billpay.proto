@@ -1,0 +1,44 @@
+// proto/billpay.proto
+
+syntax = "proto3";
+
+package revenant.billpay.v1;
+
+enum BillPayStatus {
+  BILLPAY_STATUS_UNSPECIFIED = 0;
+  BILLPAY_STATUS_SUCCESS = 1;
+  BILLPAY_STATUS_FAILED = 2;
+  BILLPAY_STATUS_PENDING = 3; // preserved from the old PENDING status_map outcome — no polling/settlement-watch logic added beyond what the old flow did; see workflows.ts note
+  BILLPAY_STATUS_UNKNOWN_PROVIDER = 4;
+  BILLPAY_STATUS_PROVIDER_UNAVAILABLE = 5;
+}
+
+// Deliberately flat and generic — NOT a separate message per provider type.
+// `identifier` carries whatever the old flow called account_number,
+// protocol_number, inn_number, or phone_number depending on provider; the
+// provider_registry's field_mapping_schema (DB-resident, not in this proto)
+// is what decides which provider-specific JSON key `identifier` becomes on
+// the outbound call. This is the actual point of moving the registry to a
+// database — the wire contract a caller deals with shouldn't grow a new
+// field every time a new utility provider gets onboarded.
+message BillPayRequest {
+  string trace_id = 1; // optional from the caller's perspective — see billpay.schema.ts for the proto3-empty-string handling
+  string tenant_id = 2;
+  string customer_id = 3;
+  string provider_code = 4; // e.g. "UZBEKENERGO", "TAX_INN" — looked up against provider_registry, never hardcoded here
+  string identifier = 5;
+  int64 amount_uzs = 6;
+}
+
+message BillPayResponse {
+  string trace_id = 1;
+  BillPayStatus status = 2;
+  string provider_transaction_id = 3; // empty when status is not SUCCESS
+  int64 confirmed_amount_uzs = 4;
+  string idempotency_key = 5;
+  string error_detail = 6; // populated on FAILED / UNKNOWN_PROVIDER / PROVIDER_UNAVAILABLE
+}
+
+service BillPayService {
+  rpc PayBill(BillPayRequest) returns (BillPayResponse);
+}
