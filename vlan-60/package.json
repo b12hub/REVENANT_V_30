@@ -1,0 +1,26 @@
+{
+  "name": "revenant-v31-f5-nudge-service",
+  "version": "1.0.0",
+  "description": "REVENANT V31 — F5 (Proactive Nudge & Engagement Service) — Temporal migration of the legacy n8n workflow",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "worker": "ts-node src/worker.ts",
+    "schedule": "ts-node src/schedule-cron.ts"
+  },
+  "dependencies": {
+    "@temporalio/activity": "^1.11.0",
+    "@temporalio/client": "^1.11.0",
+    "@temporalio/worker": "^1.11.0",
+    "@temporalio/workflow": "^1.11.0",
+    "@temporalio/common": "^1.11.0",
+    "openai": "^4.0.0",
+    "pg": "^8.11.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/pg": "^8.10.0",
+    "typescript": "^5.4.0",
+    "ts-node": "^10.9.0"
+  }
+}
