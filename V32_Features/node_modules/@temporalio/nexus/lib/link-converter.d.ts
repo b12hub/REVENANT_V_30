@@ -1,0 +1,11 @@
+import type { Link as NexusLink } from 'nexus-rpc';
+import { temporal } from '@temporalio/proto';
+type TemporalLink = temporal.api.common.v1.ILink;
+type WorkflowEventLink = temporal.api.common.v1.Link.IWorkflowEvent;
+type NexusOperationLink = temporal.api.common.v1.Link.INexusOperation;
+export declare function convertTemporalLinkToNexusLink(link: TemporalLink): NexusLink;
+export declare function convertNexusLinkToTemporalLink(link: NexusLink): TemporalLink;
+export declare function convertWorkflowEventLinkToNexusLink(we: WorkflowEventLink): NexusLink;
+export declare function convertNexusOperationLinkToNexusLink(opLink: NexusOperationLink): NexusLink;
+export declare function convertNexusLinkToWorkflowEventLink(link: NexusLink): WorkflowEventLink;
+export {};
